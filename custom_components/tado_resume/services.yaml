@@ -5,3 +5,33 @@ resume_schedule:
       domain: button
 
 resume_all_schedules:
+
+set_room_temperature:
+  target:
+    entity:
+      integration: tado_resume
+      domain: climate
+  fields:
+    temperature:
+      required: true
+      selector:
+        number:
+          min: 5
+          max: 25
+          step: 0.5
+          unit_of_measurement: "°C"
+    termination:
+      default: next_schedule_block
+      selector:
+        select:
+          translation_key: termination
+          options:
+            - next_schedule_block
+            - duration
+            - indefinite
+    duration:
+      selector:
+        number:
+          min: 1
+          max: 1440
+          unit_of_measurement: min
