@@ -29,6 +29,7 @@ class TadoResumeConfigFlow(ConfigFlow, domain=DOMAIN):
         self._device: dict[str, Any] = {}
         self._refresh_token: str | None = None
         self._homes: list[dict[str, Any]] = []
+        self._api: TadoApi | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -68,7 +69,14 @@ class TadoResumeConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def _async_pick_home(self) -> ConfigFlowResult:
-        api = TadoApi(async_get_clientsession(self.hass), self._refresh_token or "")
+        async def _rotated(token: str) -> None:
+            # tado refresh tokens are single-use: keep the newest one.
+            self._refresh_token = token
+
+        # One client for the whole flow so a rotated token is never lost.
+        api = self._api = TadoApi(
+            async_get_clientsession(self.hass), self._refresh_token or "", _rotated
+        )
         try:
             self._homes = await api.async_get_homes()
         except TadoError:
@@ -85,8 +93,8 @@ class TadoResumeConfigFlow(ConfigFlow, domain=DOMAIN):
         """Choose a home when the account has several."""
         if user_input is not None:
             home = next(h for h in self._homes if str(h["id"]) == user_input["home"])
-            api = TadoApi(async_get_clientsession(self.hass), self._refresh_token or "")
-            return await self._async_create(home, api)
+            assert self._api is not None
+            return await self._async_create(home, self._api)
         return self.async_show_form(
             step_id="home",
             data_schema=vol.Schema(

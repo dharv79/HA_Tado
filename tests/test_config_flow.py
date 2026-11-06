@@ -41,3 +41,24 @@ async def test_flow_creates_entry(hass: HomeAssistant) -> None:
         "generation": "LINE_X",
         "refresh_token": "r",
     }
+
+
+async def test_rotated_refresh_token_is_stored(hass: HomeAssistant) -> None:
+    """The token rotated during setup, not the original, must be saved."""
+
+    async def fake_homes(self):
+        await self._token_updated("rotated")
+        return [{"id": 1, "name": "Home"}]
+
+    with (
+        patch(f"{P}.async_start_device_flow", AsyncMock(return_value=DEVICE)),
+        patch(f"{P}.async_poll_device_flow", AsyncMock(return_value={"refresh_token": "old"})),
+        patch(f"{P}.TadoApi.async_get_homes", fake_homes),
+        patch(f"{P}.TadoApi.async_get_generation", AsyncMock(return_value="LINE_X")),
+        patch("custom_components.tado_resume.async_setup_entry", AsyncMock(return_value=True)),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["data"]["refresh_token"] == "rotated"
