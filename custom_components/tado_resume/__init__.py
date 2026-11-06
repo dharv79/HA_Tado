@@ -11,6 +11,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady,
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import TadoApi, TadoAuthError, TadoError
+from .coordinator import TadoCoordinator
 from .const import (
     CONF_GENERATION,
     CONF_HOME_ID,
@@ -30,6 +31,7 @@ class TadoResumeData:
     home_id: int
     generation: str
     rooms: list[dict]
+    coordinator: TadoCoordinator
 
 
 type TadoResumeConfigEntry = ConfigEntry[TadoResumeData]
@@ -55,7 +57,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: TadoResumeConfigEntry) -
     except TadoError as err:
         raise ConfigEntryNotReady from err
 
-    entry.runtime_data = TadoResumeData(api, home_id, generation, rooms)
+    coordinator = TadoCoordinator(hass, entry, api, home_id, generation)
+    await coordinator.async_config_entry_first_refresh()
+
+    entry.runtime_data = TadoResumeData(api, home_id, generation, rooms, coordinator)
 
     if not hass.services.has_service(DOMAIN, SERVICE_RESUME_ALL):
 

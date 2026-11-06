@@ -18,6 +18,9 @@ async def _setup(hass: HomeAssistant, generation: str = "LINE_X"):
     with patch(
         "custom_components.tado_resume.TadoApi.async_get_rooms",
         AsyncMock(return_value=[{"id": 5, "name": "Hall"}]),
+    ), patch(
+        "custom_components.tado_resume.TadoApi.async_get_state",
+        AsyncMock(return_value={"rooms": {5: {"id": 5}}}),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()

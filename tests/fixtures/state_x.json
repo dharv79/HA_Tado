@@ -1,0 +1,53 @@
+{
+  "rooms": {
+    "5": {
+      "id": 5,
+      "name": "Hall",
+      "sensorDataPoints": {
+        "insideTemperature": {
+          "value": 19.5
+        },
+        "humidity": {
+          "percentage": 48
+        }
+      },
+      "setting": {
+        "power": "ON",
+        "temperature": {
+          "value": 20.0
+        }
+      },
+      "heatingPower": {
+        "percentage": 40
+      },
+      "openWindow": null,
+      "manualControlTermination": {
+        "type": "TIMER",
+        "remainingTimeInSeconds": 900
+      },
+      "serialNo": "RU0000000000"
+    }
+  },
+  "devices": [
+    {
+      "serialNumber": "RU0000000000",
+      "batteryState": "NORMAL"
+    }
+  ],
+  "presence": {
+    "presence": "HOME"
+  },
+  "weather": {
+    "outsideTemperature": {
+      "celsius": 8.0
+    }
+  },
+  "mobile_devices": [
+    {
+      "name": "Phone",
+      "location": {
+        "atHome": true
+      }
+    }
+  ]
+}
