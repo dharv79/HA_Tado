@@ -116,9 +116,11 @@ class TadoApi:
     async def _request(self, method: str, url: str) -> Any:
         for attempt in (0, 1):
             token = await self._async_ensure_token(force=attempt == 1)
-            async with self._session.request(
-                method, url, headers={"Authorization": f"Bearer {token}"}
-            ) as resp:
+            headers = {"Authorization": f"Bearer {token}"}
+            if method in ("POST", "PUT", "PATCH"):
+                # tado X rejects body-less writes without a JSON content type.
+                headers["Content-Type"] = "application/json"
+            async with self._session.request(method, url, headers=headers) as resp:
                 if resp.status == 401 and attempt == 0:
                     continue
                 if resp.status == 401:
