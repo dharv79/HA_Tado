@@ -4,3 +4,4 @@ Home Assistant custom integration `tado_resume` (resume tado schedules; tado X a
 
 ## Conventions
 - Release: version lives in `custom_components/tado_resume/manifest.json`; release = push `release/<version>` branch (tag containing `bN` → prerelease), via `.github/workflows/release.yml`. Detail: `docs/RELEASING.md`.
+- Roadmap: `docs/plan/PLAN.md` (index); read only the phase file being worked on. Release after each finished piece of work.
