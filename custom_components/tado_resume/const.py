@@ -1,4 +1,4 @@
-"""Constants for Tado Resume Schedule."""
+"""Constants for Home Assistant for Tado Thermostat."""
 
 DOMAIN = "tado_resume"
 

@@ -1,6 +1,6 @@
 {
   "domain": "tado_resume",
-  "name": "Tado Resume Schedule",
+  "name": "Home Assistant for Tado Thermostat",
   "codeowners": ["@dharv79"],
   "config_flow": true,
   "documentation": "https://github.com/dharv79/HA_Tado",
