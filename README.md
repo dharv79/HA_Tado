@@ -1,4 +1,4 @@
-# Tado Resume Schedule
+# Home Assistant for Tado Thermostat
 
 A Home Assistant custom integration that resumes the tado° smart schedule, as the tado app does. Supports tado X (Bridge X) and classic (v2) homes.
 
@@ -12,7 +12,7 @@ A Home Assistant custom integration that resumes the tado° smart schedule, as t
 
 1. In HACS, add this repository as a custom repository (type: Integration) and install it.
 2. Restart Home Assistant.
-3. Add the **Tado Resume Schedule** integration. Open the displayed tado URL, approve access, then select Submit.
+3. Add the **Home Assistant for Tado Thermostat** integration. Open the displayed tado URL, approve access, then select Submit.
 
 The integration keeps its own login, independent of the core tado integration.
 

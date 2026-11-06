@@ -1,4 +1,4 @@
-"""Tado Resume Schedule integration."""
+"""Home Assistant for Tado Thermostat integration."""
 
 from __future__ import annotations
 
