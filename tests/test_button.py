@@ -31,7 +31,10 @@ async def test_room_button_resumes(hass: HomeAssistant) -> None:
     await _setup(hass)
     with patch(
         "custom_components.tado_resume.TadoApi.async_resume_room", AsyncMock()
-    ) as resume:
+    ) as resume, patch(
+        "custom_components.tado_resume.coordinator.TadoCoordinator.async_request_refresh",
+        AsyncMock(),
+    ) as refresh:
         await hass.services.async_call(
             "button",
             "press",
@@ -39,14 +42,19 @@ async def test_room_button_resumes(hass: HomeAssistant) -> None:
             blocking=True,
         )
     resume.assert_awaited_once_with(1, "LINE_X", 5)
+    refresh.assert_awaited_once()
 
 
 async def test_resume_all_service(hass: HomeAssistant) -> None:
     await _setup(hass)
     with patch(
         "custom_components.tado_resume.TadoApi.async_resume_all", AsyncMock()
-    ) as resume:
+    ) as resume, patch(
+        "custom_components.tado_resume.coordinator.TadoCoordinator.async_request_refresh",
+        AsyncMock(),
+    ) as refresh:
         await hass.services.async_call(
             DOMAIN, "resume_all_schedules", {}, blocking=True
         )
     resume.assert_awaited_once_with(1, "LINE_X", [5])
+    refresh.assert_awaited_once()

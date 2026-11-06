@@ -73,6 +73,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: TadoResumeConfigEntry) -
                     )
                 except TadoError as err:
                     raise HomeAssistantError(f"Resume failed: {err}") from err
+                await data.coordinator.async_request_refresh()
 
         hass.services.async_register(DOMAIN, SERVICE_RESUME_ALL, _resume_all)
 
