@@ -181,3 +181,41 @@ class TadoApi:
             return
         for room_id in room_ids:
             await self.async_resume_room(home_id, generation, room_id)
+
+    async def _optional(self, url: str) -> Any:
+        """GET an endpoint that may be unavailable for some homes."""
+        try:
+            return await self._request("GET", url)
+        except TadoAuthError:
+            raise
+        except TadoError:
+            return None
+
+    async def async_get_state(
+        self, home_id: int, generation: str
+    ) -> dict[str, Any]:
+        """Return a snapshot of the home: rooms, devices, presence, weather.
+
+        Rooms are required; the other sections are optional and are None when
+        the endpoint is unavailable. Payloads are kept as returned by tado.
+        """
+        classic = f"{CLASSIC_API}/homes/{home_id}"
+        if generation == GENERATION_X:
+            rooms = await self._request("GET", f"{X_API}/homes/{home_id}/rooms")
+            devices = await self._optional(f"{X_API}/homes/{home_id}/roomsAndDevices")
+            presence = await self._optional(f"{X_API}/homes/{home_id}/state")
+        else:
+            zones = await self._request("GET", f"{classic}/zones")
+            rooms = []
+            for zone in zones or []:
+                state = await self._optional(f"{classic}/zones/{zone['id']}/state")
+                rooms.append({**zone, **(state or {})})
+            devices = await self._optional(f"{classic}/devices")
+            presence = await self._optional(f"{classic}/state")
+        return {
+            "rooms": {room["id"]: room for room in rooms or []},
+            "devices": devices,
+            "presence": presence,
+            "weather": await self._optional(f"{classic}/weather"),
+            "mobile_devices": await self._optional(f"{classic}/mobileDevices"),
+        }
