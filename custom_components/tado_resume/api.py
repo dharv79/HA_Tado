@@ -124,7 +124,10 @@ class TadoApi:
                 if resp.status == 401:
                     raise TadoAuthError("Unauthorised")
                 if resp.status >= 400:
-                    raise TadoError(f"{method} {url} failed ({resp.status})")
+                    detail = (await resp.text())[:300]
+                    raise TadoError(
+                        f"{method} {url} failed ({resp.status}): {detail}"
+                    )
                 if resp.status == 204 or resp.content_length == 0:
                     return None
                 try:
