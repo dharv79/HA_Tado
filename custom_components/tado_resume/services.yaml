@@ -1,0 +1,7 @@
+resume_schedule:
+  target:
+    entity:
+      integration: tado_resume
+      domain: button
+
+resume_all_schedules:
