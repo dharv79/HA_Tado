@@ -20,7 +20,7 @@ from .const import (
     SERVICE_RESUME_ALL,
 )
 
-PLATFORMS = [Platform.BUTTON]
+PLATFORMS = [Platform.BUTTON, Platform.CLIMATE]
 
 
 @dataclass

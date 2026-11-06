@@ -29,7 +29,7 @@ def room_capabilities(room: dict[str, Any]) -> frozenset[str]:
     if "humidity" in points:
         caps.add(CAP_HUMIDITY)
     setting = room.get("setting") or {}
-    if "temperature" in setting or "type" in setting:
+    if {"temperature", "type", "power"} & setting.keys():
         caps.add(CAP_TARGET)
     if "heatingPower" in room or "heatingPower" in points:
         caps.add(CAP_HEATING_POWER)

@@ -18,6 +18,25 @@ X_API = "https://hops.tado.com"
 GENERATION_X = "LINE_X"
 GENERATION_CLASSIC = "PRE_LINE_X"
 
+TERMINATION_NEXT_BLOCK = "next_schedule_block"
+TERMINATION_TIMER = "duration"
+TERMINATION_MANUAL = "indefinite"
+TERMINATIONS = (TERMINATION_NEXT_BLOCK, TERMINATION_TIMER, TERMINATION_MANUAL)
+
+BOOST_TEMPERATURE = 25.0
+BOOST_SECONDS = 1800
+
+_X_TERMINATION = {
+    TERMINATION_NEXT_BLOCK: "NEXT_TIME_BLOCK",
+    TERMINATION_TIMER: "TIMER",
+    TERMINATION_MANUAL: "MANUAL",
+}
+_CLASSIC_TERMINATION = {
+    TERMINATION_NEXT_BLOCK: "TADO_MODE",
+    TERMINATION_TIMER: "TIMER",
+    TERMINATION_MANUAL: "MANUAL",
+}
+
 _TOKEN_MARGIN = 30
 
 
@@ -113,14 +132,18 @@ class TadoApi:
                 await self._token_updated(new_refresh)
         return self._access_token
 
-    async def _request(self, method: str, url: str) -> Any:
+    async def _request(
+        self, method: str, url: str, json: dict[str, Any] | None = None
+    ) -> Any:
         for attempt in (0, 1):
             token = await self._async_ensure_token(force=attempt == 1)
             headers = {"Authorization": f"Bearer {token}"}
             if method in ("POST", "PUT", "PATCH"):
                 # tado X rejects body-less writes without a JSON content type.
                 headers["Content-Type"] = "application/json"
-            async with self._session.request(method, url, headers=headers) as resp:
+            async with self._session.request(
+                method, url, headers=headers, json=json
+            ) as resp:
                 if resp.status == 401 and attempt == 0:
                     continue
                 if resp.status == 401:
@@ -219,3 +242,72 @@ class TadoApi:
             "weather": await self._optional(f"{classic}/weather"),
             "mobile_devices": await self._optional(f"{classic}/mobileDevices"),
         }
+
+    async def async_set_manual(
+        self,
+        home_id: int,
+        generation: str,
+        room_id: int,
+        temperature: float | None,
+        termination: str = TERMINATION_NEXT_BLOCK,
+        duration: int | None = None,
+        boost: bool = False,
+    ) -> None:
+        """Override a room's schedule.
+
+        A temperature of None switches heating off (frost protection).
+        ``duration`` (seconds) is required for the timer termination.
+        Boost is supported on tado X only.
+        """
+        if termination not in TERMINATIONS:
+            raise TadoError(f"Unknown termination type: {termination}")
+        if termination == TERMINATION_TIMER and not duration:
+            raise TadoError("A duration is required for a timed override")
+        if boost and generation != GENERATION_X:
+            raise TadoError("Boost is only supported on tado X")
+        if generation == GENERATION_X:
+            setting: dict[str, Any] = {"power": "OFF"}
+            if temperature is not None:
+                setting = {
+                    "power": "ON",
+                    "isBoost": str(boost),
+                    "temperature": {"value": f"{temperature}"},
+                }
+            term: dict[str, Any] = {"type": _X_TERMINATION[termination]}
+            if termination == TERMINATION_TIMER:
+                term["durationInSeconds"] = f"{duration}"
+            await self._request(
+                "POST",
+                f"{X_API}/homes/{home_id}/rooms/{room_id}/manualControl",
+                {"setting": setting, "termination": term},
+            )
+            return
+        setting = {"type": "HEATING", "power": "OFF"}
+        if temperature is not None:
+            setting = {
+                "type": "HEATING",
+                "power": "ON",
+                "temperature": {"celsius": temperature},
+            }
+        term = {"typeSkillBasedApp": _CLASSIC_TERMINATION[termination]}
+        if termination == TERMINATION_TIMER:
+            term["durationInSeconds"] = duration
+        await self._request(
+            "PUT",
+            f"{CLASSIC_API}/homes/{home_id}/zones/{room_id}/overlay",
+            {"setting": setting, "termination": term},
+        )
+
+    async def async_boost_room(
+        self, home_id: int, generation: str, room_id: int
+    ) -> None:
+        """Boost a room for 30 minutes (tado X only)."""
+        await self.async_set_manual(
+            home_id,
+            generation,
+            room_id,
+            BOOST_TEMPERATURE,
+            TERMINATION_TIMER,
+            BOOST_SECONDS,
+            boost=True,
+        )
