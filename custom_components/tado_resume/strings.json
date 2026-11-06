@@ -1,0 +1,38 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Log in to tado",
+        "description": "Open {url} (code: {code}), approve access, then select Submit."
+      },
+      "home": {
+        "title": "Select home",
+        "data": { "home": "Home" }
+      }
+    },
+    "error": {
+      "not_authorised": "Login has not been approved yet. Approve it in the browser, then submit again."
+    },
+    "abort": {
+      "cannot_connect": "Unable to reach tado.",
+      "auth_failed": "Authentication failed or expired. Start again.",
+      "no_homes": "No homes found on this account.",
+      "already_configured": "This home is already configured."
+    }
+  },
+  "entity": {
+    "button": {
+      "resume_schedule": { "name": "Resume schedule" }
+    }
+  },
+  "services": {
+    "resume_schedule": {
+      "name": "Resume schedule",
+      "description": "Removes the manual override and resumes the smart schedule for the selected rooms."
+    },
+    "resume_all_schedules": {
+      "name": "Resume all schedules",
+      "description": "Resumes the smart schedule in every room of every configured home."
+    }
+  }
+}
