@@ -8,7 +8,7 @@ Version lives in `custom_components/tado_resume/manifest.json`. A release is cre
 - Only release from the merged head of `main`, never from a feature branch or unmerged commit.
 - The trigger branch version must match `manifest.json` on that commit.
 - Never reuse a version. If a release is wrong, bump the version and release again; do not delete and recreate the tag.
-- Do not start a release unless explicitly asked. Automated notifications are not approval.
+- Release automatically once a piece of work is merged (standing user instruction). Automated notifications are not approval for anything else.
 
 ## Procedure
 1. **Bump PR:** on the dev branch set the new version in `manifest.json`. For hand-written notes also add `RELEASE_NOTES.md` (what is new, fixes, any user action required). Open a PR to `main`, wait for the Tests check to pass, squash-merge.
