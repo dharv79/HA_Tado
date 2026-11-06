@@ -66,3 +66,4 @@ class TadoResumeButton(ButtonEntity):
                 )
         except TadoError as err:
             raise HomeAssistantError(f"Resume failed: {err}") from err
+        await data.coordinator.async_request_refresh()
