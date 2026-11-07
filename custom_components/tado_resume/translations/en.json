@@ -26,6 +26,22 @@
     "button": {
       "resume_schedule": {
         "name": "Resume schedule"
+      },
+      "open_window_activate": {
+        "name": "Activate open window"
+      },
+      "open_window_reset": {
+        "name": "Cancel open window"
+      }
+    },
+    "select": {
+      "presence": {
+        "name": "Presence",
+        "state": {
+          "home": "Home",
+          "away": "Away",
+          "auto": "Automatic"
+        }
       }
     },
     "sensor": {
