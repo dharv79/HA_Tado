@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+import logging
 import time
 from typing import Any
 
 import aiohttp
+
+_LOGGER = logging.getLogger(__name__)
 
 CLIENT_ID = "1bb50063-6b0c-4d11-bd99-387f4a91cc46"
 LOGIN_URL = "https://login.tado.com/oauth2"
@@ -153,6 +156,14 @@ class TadoApi:
                     continue
                 if resp.status == 401:
                     raise TadoAuthError("Unauthorised")
+                if method != "GET":
+                    _LOGGER.info(
+                        "tado write %s %s -> %s %s",
+                        method,
+                        url,
+                        resp.status,
+                        (await resp.text())[:200],
+                    )
                 if resp.status >= 400:
                     detail = (await resp.text())[:300]
                     raise TadoError(
