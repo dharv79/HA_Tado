@@ -1,4 +1,4 @@
-"""Presence, open window and device tracker tests."""
+"""Presence, open-window sensor and device tracker tests."""
 
 from unittest.mock import AsyncMock, patch
 
@@ -46,7 +46,7 @@ async def test_entities(hass):
     ids = {e.unique_id for e in er.async_get(hass).entities.values()}
     assert "1_presence" in ids
     assert "1_5_open_window" in ids
-    assert "1_5_open_window_activate" in ids
+    assert not {i for i in ids if i.endswith(("_activate", "_reset"))}
     assert "1_mobile_1" in ids
     assert "1_mobile_2" not in ids
     assert hass.states.get("select.tado_home_presence").state == "auto"
@@ -78,23 +78,6 @@ async def test_select_presence(hass):
     call.assert_awaited_once_with(1, "LINE_X", "home")
 
 
-async def test_open_window_button(hass):
-    await _setup(hass, {})
-    with patch(
-        "custom_components.tado_resume.TadoApi.async_set_open_window", AsyncMock()
-    ) as call, patch(
-        "custom_components.tado_resume.coordinator.TadoCoordinator.async_request_refresh",
-        AsyncMock(),
-    ):
-        await hass.services.async_call(
-            "button",
-            "press",
-            {"entity_id": "button.hall_cancel_open_window"},
-            blocking=True,
-        )
-    call.assert_awaited_once_with(1, "LINE_X", 5, False)
-
-
 @pytest.mark.parametrize(
     ("generation", "presence", "expected"),
     [
@@ -111,17 +94,24 @@ async def test_presence_requests(generation, presence, expected):
     api._request.assert_awaited_once_with(*expected)
 
 
-@pytest.mark.parametrize(
-    ("generation", "active", "expected"),
-    [
-        ("LINE_X", True, ("POST", "https://hops.tado.com/homes/1/rooms/5/openWindow")),
-        ("LINE_X", False, ("DELETE", "https://hops.tado.com/homes/1/rooms/5/openWindow")),
-        ("PRE_LINE_X", True, ("POST", "https://my.tado.com/api/v2/homes/1/zones/5/state/openWindow/activate")),
-        ("PRE_LINE_X", False, ("DELETE", "https://my.tado.com/api/v2/homes/1/zones/5/state/openWindow")),
-    ],
-)
-async def test_open_window_requests(generation, active, expected):
-    api = TadoApi(None, "r")
-    api._request = AsyncMock()
-    await api.async_set_open_window(1, generation, 5, active)
-    api._request.assert_awaited_once_with(*expected)
+async def test_legacy_open_window_buttons_removed(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="1",
+        data={"home_id": 1, "generation": "LINE_X", "refresh_token": "r"},
+    )
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "button", DOMAIN, "1_5_open_window_activate", config_entry=entry
+    )
+    with patch(
+        "custom_components.tado_resume.TadoApi.async_get_rooms",
+        AsyncMock(return_value=[{"id": 5, "name": "Hall"}]),
+    ), patch(
+        "custom_components.tado_resume.TadoApi.async_get_state",
+        AsyncMock(return_value={"rooms": {5: ROOM}}),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    assert registry.async_get_entity_id("button", DOMAIN, "1_5_open_window_activate") is None

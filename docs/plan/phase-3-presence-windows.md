@@ -18,3 +18,6 @@ Implemented: Presence select (home, away, automatic) per home; open-window binar
 
 Requests (desk research, unverified on hardware): tado X `PUT /presence` with `homePresence` HOME/AWAY/AUTO; classic `PUT`/`DELETE presenceLock`; open window `POST`/`DELETE rooms/{id}/openWindow` (X) and `POST .../state/openWindow/activate`, `DELETE .../state/openWindow` (classic).
 Deferred: a separate geofencing toggle (covered by the "Automatic" option).
+
+## Changed (0.6.2)
+Open-window activate/cancel buttons and the API call removed at the user's request (tado returned 204 but had no visible effect); the open-window binary sensor is kept. 0.6.2 deletes the old buttons from the registry.

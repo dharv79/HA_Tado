@@ -11,7 +11,6 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import TadoResumeConfigEntry
 from .api import GENERATION_X, TadoError
-from .capabilities import CAP_OPEN_WINDOW
 from .const import DOMAIN, SERVICE_RESUME_SCHEDULE
 
 
@@ -29,12 +28,6 @@ async def async_setup_entry(
     entities.append(TadoHomeActionButton(entry, "turn_off_all", "async_turn_off_all"))
     if data.generation == GENERATION_X:
         entities.append(TadoHomeActionButton(entry, "boost_all", "async_boost_all"))
-    for room in data.rooms:
-        if CAP_OPEN_WINDOW in data.coordinator.capabilities.get(room["id"], ()):
-            for active in (True, False):
-                entities.append(
-                    TadoOpenWindowButton(entry, room["id"], room["name"], active)
-                )
     async_add_entities(entities)
 
     entity_platform.async_get_current_platform().async_register_entity_service(
@@ -76,39 +69,6 @@ class TadoResumeButton(ButtonEntity):
                 )
         except TadoError as err:
             raise HomeAssistantError(f"Resume failed: {err}") from err
-        await data.coordinator.async_request_refresh()
-
-
-class TadoOpenWindowButton(ButtonEntity):
-    """Activate or cancel open-window mode for a room."""
-
-    _attr_has_entity_name = True
-
-    def __init__(
-        self, entry: TadoResumeConfigEntry, room_id: int, room_name: str, active: bool
-    ) -> None:
-        self._entry = entry
-        self._room_id = room_id
-        self._active = active
-        data = entry.runtime_data
-        key = "open_window_activate" if active else "open_window_reset"
-        self._attr_translation_key = key
-        self._attr_unique_id = f"{data.home_id}_{room_id}_{key}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"{data.home_id}_{room_id}")},
-            name=room_name,
-            manufacturer="tado°",
-        )
-
-    async def async_press(self) -> None:
-        """Send the open-window command."""
-        data = self._entry.runtime_data
-        try:
-            await data.api.async_set_open_window(
-                data.home_id, data.generation, self._room_id, self._active
-            )
-        except TadoError as err:
-            raise HomeAssistantError(f"Open window request failed: {err}") from err
         await data.coordinator.async_request_refresh()
 
 
