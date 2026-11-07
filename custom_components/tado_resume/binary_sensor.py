@@ -8,12 +8,10 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import TadoResumeConfigEntry
-from .capabilities import CAP_OPEN_WINDOW
 from .devices import parse_devices
-from .sensor import _DeviceEntity, room_device_info
+from .sensor import _DeviceEntity
 
 
 async def async_setup_entry(
@@ -23,10 +21,6 @@ async def async_setup_entry(
 ) -> None:
     """Add binary sensors only for devices that report the data."""
     entities: list[BinarySensorEntity] = []
-    data = entry.runtime_data
-    for room in data.rooms:
-        if CAP_OPEN_WINDOW in data.coordinator.capabilities.get(room["id"], ()):
-            entities.append(TadoOpenWindow(entry, room["id"], room["name"]))
     for device in parse_devices((entry.runtime_data.coordinator.data or {}).get("devices")):
         if device["battery_low"] is not None:
             entities.append(TadoLowBattery(entry, device["serial"]))
@@ -62,26 +56,3 @@ class TadoConnectivity(_DeviceEntity, BinarySensorEntity):
         device = self._device
         return device["connected"] if device else None
 
-
-class TadoOpenWindow(CoordinatorEntity, BinarySensorEntity):
-    """Open window detected in a room."""
-
-    _attr_has_entity_name = True
-    _attr_name = "Open window"
-    _attr_device_class = BinarySensorDeviceClass.WINDOW
-
-    def __init__(self, entry, room_id, room_name):
-        data = entry.runtime_data
-        super().__init__(data.coordinator)
-        self._room_id = room_id
-        self._attr_unique_id = f"{data.home_id}_{room_id}_open_window"
-        self._attr_device_info = room_device_info(data.home_id, room_id, room_name)
-
-    @property
-    def is_on(self) -> bool | None:
-        room = (self.coordinator.data or {}).get("rooms", {}).get(self._room_id)
-        if room is None:
-            return None
-        if "openWindowDetected" in room:
-            return bool(room["openWindowDetected"])
-        return bool(room.get("openWindow"))

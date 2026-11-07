@@ -264,20 +264,6 @@ class TadoApi:
                 {"homePresence": presence.upper()},
             )
 
-    async def async_set_open_window(
-        self, home_id: int, generation: str, room_id: int, active: bool
-    ) -> None:
-        """Activate or cancel open-window mode for a room."""
-        if generation == GENERATION_X:
-            url = f"{X_API}/homes/{home_id}/rooms/{room_id}/openWindow"
-            await self._request("POST" if active else "DELETE", url)
-            return
-        url = f"{CLASSIC_API}/homes/{home_id}/zones/{room_id}/state/openWindow"
-        if active:
-            await self._request("POST", f"{url}/activate")
-        else:
-            await self._request("DELETE", url)
-
     async def _optional(self, url: str) -> Any:
         """GET an endpoint that may be unavailable for some homes."""
         try:

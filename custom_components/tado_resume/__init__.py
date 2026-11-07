@@ -8,6 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import TadoApi, TadoAuthError, TadoError
@@ -63,6 +64,16 @@ def _home_service(hass: HomeAssistant, method: str):
     return _handler
 
 
+def _remove_open_window_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove open-window entities created by 0.5.0 to 0.6.1."""
+    registry = er.async_get(hass)
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if entity.unique_id.endswith(
+            ("_open_window", "_open_window_activate", "_open_window_reset")
+        ):
+            registry.async_remove(entity.entity_id)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: TadoResumeConfigEntry) -> bool:
     """Set up a tado home."""
 
@@ -96,6 +107,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: TadoResumeConfigEntry) -
         ):
             hass.services.async_register(DOMAIN, service, _home_service(hass, method))
 
+    _remove_open_window_entities(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
