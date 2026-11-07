@@ -27,6 +27,14 @@
       "resume_schedule": {
         "name": "Resume schedule"
       }
+    },
+    "sensor": {
+      "heating_power": {
+        "name": "Heating power"
+      },
+      "firmware": {
+        "name": "Firmware version"
+      }
     }
   },
   "services": {
