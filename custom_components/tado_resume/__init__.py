@@ -64,13 +64,11 @@ def _home_service(hass: HomeAssistant, method: str):
     return _handler
 
 
-def _remove_open_window_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Remove open-window entities created by 0.5.0 to 0.6.1."""
+def _remove_open_window_buttons(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove the open-window buttons created by 0.5.0 to 0.6.1."""
     registry = er.async_get(hass)
     for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
-        if entity.unique_id.endswith(
-            ("_open_window", "_open_window_activate", "_open_window_reset")
-        ):
+        if entity.unique_id.endswith(("_open_window_activate", "_open_window_reset")):
             registry.async_remove(entity.entity_id)
 
 
@@ -107,7 +105,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: TadoResumeConfigEntry) -
         ):
             hass.services.async_register(DOMAIN, service, _home_service(hass, method))
 
-    _remove_open_window_entities(hass, entry)
+    _remove_open_window_buttons(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

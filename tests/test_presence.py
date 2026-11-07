@@ -1,4 +1,4 @@
-"""Presence and device tracker tests."""
+"""Presence, open-window sensor and device tracker tests."""
 
 from unittest.mock import AsyncMock, patch
 
@@ -45,10 +45,12 @@ async def test_entities(hass):
     )
     ids = {e.unique_id for e in er.async_get(hass).entities.values()}
     assert "1_presence" in ids
-    assert not {i for i in ids if "open_window" in i}
+    assert "1_5_open_window" in ids
+    assert not {i for i in ids if i.endswith(("_activate", "_reset"))}
     assert "1_mobile_1" in ids
     assert "1_mobile_2" not in ids
     assert hass.states.get("select.tado_home_presence").state == "auto"
+    assert hass.states.get("binary_sensor.hall_open_window").state == "on"
     assert hass.states.get("device_tracker.phone").state == "home"
 
 
@@ -92,7 +94,7 @@ async def test_presence_requests(generation, presence, expected):
     api._request.assert_awaited_once_with(*expected)
 
 
-async def test_legacy_open_window_entities_removed(hass):
+async def test_legacy_open_window_buttons_removed(hass):
     entry = MockConfigEntry(
         domain=DOMAIN,
         unique_id="1",
@@ -101,7 +103,7 @@ async def test_legacy_open_window_entities_removed(hass):
     entry.add_to_hass(hass)
     registry = er.async_get(hass)
     registry.async_get_or_create(
-        "binary_sensor", DOMAIN, "1_5_open_window", config_entry=entry
+        "button", DOMAIN, "1_5_open_window_activate", config_entry=entry
     )
     with patch(
         "custom_components.tado_resume.TadoApi.async_get_rooms",
@@ -112,4 +114,4 @@ async def test_legacy_open_window_entities_removed(hass):
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
-    assert registry.async_get_entity_id("binary_sensor", DOMAIN, "1_5_open_window") is None
+    assert registry.async_get_entity_id("button", DOMAIN, "1_5_open_window_activate") is None
