@@ -12,3 +12,9 @@ Confirm presence write endpoints on tado X, whether mobile device location is ex
 
 ## Exit criteria
 Presence changes reflect in tado app and back in Home Assistant; trackers appear only for opted-in devices.
+
+## Status (0.5.0)
+Implemented: Presence select (home, away, automatic) per home; open-window binary sensor, with activate and cancel buttons, per room that reports `openWindow`/`openWindowDetected`; a device tracker per mobile device with `geoTrackingEnabled` (from `mobileDevices`). Entities appear only where the payload has the data.
+
+Requests (desk research, unverified on hardware): tado X `PUT /presence` with `homePresence` HOME/AWAY/AUTO; classic `PUT`/`DELETE presenceLock`; open window `POST`/`DELETE rooms/{id}/openWindow` (X) and `POST .../state/openWindow/activate`, `DELETE .../state/openWindow` (classic).
+Deferred: a separate geofencing toggle (covered by the "Automatic" option).

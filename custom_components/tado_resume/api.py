@@ -23,6 +23,11 @@ TERMINATION_TIMER = "duration"
 TERMINATION_MANUAL = "indefinite"
 TERMINATIONS = (TERMINATION_NEXT_BLOCK, TERMINATION_TIMER, TERMINATION_MANUAL)
 
+PRESENCE_HOME = "home"
+PRESENCE_AWAY = "away"
+PRESENCE_AUTO = "auto"
+PRESENCE_OPTIONS = (PRESENCE_HOME, PRESENCE_AWAY, PRESENCE_AUTO)
+
 BOOST_TEMPERATURE = 25.0
 BOOST_SECONDS = 1800
 
@@ -204,6 +209,43 @@ class TadoApi:
             return
         for room_id in room_ids:
             await self.async_resume_room(home_id, generation, room_id)
+
+    async def async_set_presence(
+        self, home_id: int, generation: str, presence: str
+    ) -> None:
+        """Set home presence: "home", "away" or "auto" (geofencing)."""
+        if presence not in PRESENCE_OPTIONS:
+            raise TadoError(f"Unknown presence: {presence}")
+        if generation == GENERATION_X:
+            await self._request(
+                "PUT",
+                f"{X_API}/homes/{home_id}/presence",
+                {"homePresence": presence.upper()},
+            )
+        elif presence == PRESENCE_AUTO:
+            await self._request(
+                "DELETE", f"{CLASSIC_API}/homes/{home_id}/presenceLock"
+            )
+        else:
+            await self._request(
+                "PUT",
+                f"{CLASSIC_API}/homes/{home_id}/presenceLock",
+                {"homePresence": presence.upper()},
+            )
+
+    async def async_set_open_window(
+        self, home_id: int, generation: str, room_id: int, active: bool
+    ) -> None:
+        """Activate or cancel open-window mode for a room."""
+        if generation == GENERATION_X:
+            url = f"{X_API}/homes/{home_id}/rooms/{room_id}/openWindow"
+            await self._request("POST" if active else "DELETE", url)
+            return
+        url = f"{CLASSIC_API}/homes/{home_id}/zones/{room_id}/state/openWindow"
+        if active:
+            await self._request("POST", f"{url}/activate")
+        else:
+            await self._request("DELETE", url)
 
     async def _optional(self, url: str) -> Any:
         """GET an endpoint that may be unavailable for some homes."""
