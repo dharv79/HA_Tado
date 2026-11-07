@@ -9,7 +9,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, EntityCategory
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -62,7 +62,59 @@ async def async_setup_entry(
     for device in parse_devices((data.coordinator.data or {}).get("devices")):
         if device["firmware"]:
             entities.append(TadoFirmware(entry, device["serial"]))
+    weather = (data.coordinator.data or {}).get("weather")
+    if isinstance(weather, dict):
+        for key in WEATHER_SENSORS:
+            if key in weather:
+                entities.append(TadoWeather(entry, key))
     async_add_entities(entities)
+
+
+WEATHER_SENSORS = ("outsideTemperature", "solarIntensity", "weatherState")
+
+
+class TadoWeather(CoordinatorEntity, SensorEntity):
+    """Outside conditions reported by tado for the home location."""
+
+    _attr_has_entity_name = True
+
+    def __init__(self, entry: TadoResumeConfigEntry, key: str) -> None:
+        data = entry.runtime_data
+        super().__init__(data.coordinator)
+        self._key = key
+        self._attr_translation_key = {
+            "outsideTemperature": "outside_temperature",
+            "solarIntensity": "solar_intensity",
+            "weatherState": "weather_state",
+        }[key]
+        self._attr_unique_id = f"{data.home_id}_weather_{key}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"{data.home_id}_home")},
+            name="Tado home",
+            manufacturer="tado°",
+        )
+        if key == "outsideTemperature":
+            self._attr_device_class = SensorDeviceClass.TEMPERATURE
+            self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+        elif key == "solarIntensity":
+            self._attr_native_unit_of_measurement = PERCENTAGE
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> float | str | None:
+        item = ((self.coordinator.data or {}).get("weather") or {}).get(self._key)
+        if not isinstance(item, dict):
+            return None
+        if self._key == "outsideTemperature":
+            value = item.get("celsius")
+        elif self._key == "solarIntensity":
+            value = item.get("percentage")
+        else:
+            value = item.get("value")
+        if self._key == "weatherState":
+            return str(value).lower() if value else None
+        return float(value) if isinstance(value, (int, float)) else None
 
 
 class _RoomSensor(CoordinatorEntity, SensorEntity):

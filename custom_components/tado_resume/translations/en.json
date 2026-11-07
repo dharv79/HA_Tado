@@ -32,6 +32,12 @@
       },
       "open_window_reset": {
         "name": "Cancel open window"
+      },
+      "boost_all": {
+        "name": "Boost all rooms"
+      },
+      "turn_off_all": {
+        "name": "Turn off all rooms"
       }
     },
     "select": {
@@ -50,6 +56,15 @@
       },
       "firmware": {
         "name": "Firmware version"
+      },
+      "outside_temperature": {
+        "name": "Outside temperature"
+      },
+      "solar_intensity": {
+        "name": "Solar intensity"
+      },
+      "weather_state": {
+        "name": "Weather"
       }
     }
   },
@@ -79,6 +94,14 @@
           "description": "Minutes; required for a timed override."
         }
       }
+    },
+    "boost_all_rooms": {
+      "name": "Boost all rooms",
+      "description": "Boosts heating in every room for 30 minutes (tado X only)."
+    },
+    "turn_off_all_rooms": {
+      "name": "Turn off all rooms",
+      "description": "Switches heating off in every room until the next schedule block."
     }
   },
   "selector": {

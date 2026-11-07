@@ -35,3 +35,7 @@ set_room_temperature:
           min: 1
           max: 1440
           unit_of_measurement: min
+
+boost_all_rooms:
+
+turn_off_all_rooms:

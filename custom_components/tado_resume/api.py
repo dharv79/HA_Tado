@@ -210,6 +210,26 @@ class TadoApi:
         for room_id in room_ids:
             await self.async_resume_room(home_id, generation, room_id)
 
+    async def async_boost_all(
+        self, home_id: int, generation: str, room_ids: list[int]
+    ) -> None:
+        """Boost every room (tado X only)."""
+        if generation != GENERATION_X:
+            raise TadoError("Boost is only supported on tado X")
+        await self._request("POST", f"{X_API}/homes/{home_id}/quickActions/boost")
+
+    async def async_turn_off_all(
+        self, home_id: int, generation: str, room_ids: list[int]
+    ) -> None:
+        """Switch heating off in every room until the next schedule block."""
+        if generation == GENERATION_X:
+            await self._request(
+                "POST", f"{X_API}/homes/{home_id}/quickActions/turnOffAll"
+            )
+            return
+        for room_id in room_ids:
+            await self.async_set_manual(home_id, generation, room_id, None)
+
     async def async_set_presence(
         self, home_id: int, generation: str, presence: str
     ) -> None:
