@@ -53,3 +53,13 @@ def parse_devices(raw: Any) -> list[dict[str, Any]]:
             }
         )
     return result
+
+
+def tracked_mobiles(raw: Any) -> dict[Any, dict[str, Any]]:
+    """Return {id: device} for mobile devices that share their location."""
+    result: dict[Any, dict[str, Any]] = {}
+    for item in raw if isinstance(raw, list) else []:
+        settings = item.get("settings") or {}
+        if item.get("id") is not None and settings.get("geoTrackingEnabled"):
+            result[item["id"]] = item
+    return result

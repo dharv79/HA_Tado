@@ -13,6 +13,7 @@ from custom_components.tado_resume.api import (
     TadoApi,
     TadoAuthError,
     TadoAuthPending,
+    TadoError,
     async_poll_device_flow,
 )
 
@@ -82,3 +83,41 @@ async def test_device_flow_pending(session):
         m.post(TOKEN_URL, status=400, payload={"error": "authorization_pending"})
         with pytest.raises(TadoAuthPending):
             await async_poll_device_flow(session, "code")
+
+
+async def test_get_state_x_gathers_sections() -> None:
+    api = TadoApi(None, "r")
+    seen: list[str] = []
+
+    async def fake(method, url, json=None):
+        seen.append(url)
+        if url.endswith("/rooms"):
+            return [{"id": 5}]
+        if url.endswith("/state"):
+            raise TadoError("nope")
+        return {"ok": url.rsplit("/", 1)[-1]}
+
+    api._request = fake
+    state = await api.async_get_state(1, "LINE_X")
+    assert state["rooms"] == {5: {"id": 5}}
+    assert state["presence"] is None
+    assert state["weather"] == {"ok": "weather"}
+    assert len(seen) == 5
+
+
+async def test_get_state_classic_merges_zone_state() -> None:
+    api = TadoApi(None, "r")
+
+    async def fake(method, url, json=None):
+        if url.endswith("/zones"):
+            return [{"id": 1, "name": "A"}, {"id": 2, "name": "B"}]
+        if url.endswith("/zones/2/state"):
+            raise TadoError("nope")
+        if url.endswith("/zones/1/state"):
+            return {"heatingPower": {"percentage": 10}}
+        return {}
+
+    api._request = fake
+    state = await api.async_get_state(1, "PRE_LINE_X")
+    assert state["rooms"][1]["heatingPower"] == {"percentage": 10}
+    assert state["rooms"][2] == {"id": 2, "name": "B"}
