@@ -118,9 +118,23 @@ class TadoApi:
         self._token_updated = token_updated
         self._access_token: str | None = None
         self._expires_at = 0.0
+        self._refresh_lock = asyncio.Lock()
 
-    async def _async_ensure_token(self, force: bool = False) -> str:
-        if not force and self._access_token and time.monotonic() < self._expires_at:
+    async def _async_ensure_token(self, stale: str | None = None) -> str:
+        """Return a valid access token, refreshing at most once concurrently.
+
+        Refresh tokens are single use, so parallel refreshes would invalidate
+        each other. `stale` is a token the server rejected.
+        """
+        async with self._refresh_lock:
+            return await self._async_refresh(stale)
+
+    async def _async_refresh(self, stale: str | None) -> str:
+        if (
+            self._access_token
+            and self._access_token != stale
+            and time.monotonic() < self._expires_at
+        ):
             return self._access_token
         tokens = await _token_request(
             self._session,
@@ -144,8 +158,9 @@ class TadoApi:
     async def _request(
         self, method: str, url: str, json: dict[str, Any] | None = None
     ) -> Any:
+        token: str | None = None
         for attempt in (0, 1):
-            token = await self._async_ensure_token(force=attempt == 1)
+            token = await self._async_ensure_token(stale=token if attempt else None)
             headers = {"Authorization": f"Bearer {token}"}
             if method in ("POST", "PUT", "PATCH"):
                 # tado X rejects body-less writes without a JSON content type.

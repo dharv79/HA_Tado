@@ -1,5 +1,7 @@
 """API client tests with a mocked tado."""
 
+import asyncio
+
 import aiohttp
 import pytest
 from aioresponses import aioresponses
@@ -121,3 +123,13 @@ async def test_get_state_classic_merges_zone_state() -> None:
     state = await api.async_get_state(1, "PRE_LINE_X")
     assert state["rooms"][1]["heatingPower"] == {"percentage": 10}
     assert state["rooms"][2] == {"id": 2, "name": "B"}
+
+
+async def test_concurrent_requests_refresh_token_once(session):
+    with aioresponses() as m:
+        m.post(TOKEN_URL, payload=TOKEN)
+        m.get(f"{X_API}/homes/1/rooms", payload=[], repeat=True)
+        api = TadoApi(session, "r")
+        await asyncio.gather(*(api.async_get_rooms(1, GENERATION_X) for _ in range(5)))
+        posts = [k for k in m.requests if k[0] == "POST"]
+    assert len(posts) == 1
