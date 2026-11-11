@@ -1,17 +1,16 @@
-"""Resume-schedule buttons."""
+"""Resume-schedule and whole-home action buttons."""
 
 from __future__ import annotations
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_platform
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import TadoResumeConfigEntry
-from .api import GENERATION_X, TadoError
-from .const import DOMAIN, SERVICE_RESUME_SCHEDULE
+from .api import GENERATION_X
+from .const import SERVICE_RESUME_SCHEDULE
+from .entity import async_run, home_device_info, room_device_info
 
 
 async def async_setup_entry(
@@ -19,7 +18,7 @@ async def async_setup_entry(
     entry: TadoResumeConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Add a resume button per room plus a whole-home button."""
+    """Add a resume button per room plus the whole-home buttons."""
     data = entry.runtime_data
     entities: list[ButtonEntity] = [
         TadoResumeButton(entry, room["id"], room["name"]) for room in data.rooms
@@ -44,32 +43,28 @@ class TadoResumeButton(ButtonEntity):
     def __init__(
         self, entry: TadoResumeConfigEntry, room_id: int | None, room_name: str | None
     ) -> None:
-        self._entry = entry
+        self._data = data = entry.runtime_data
         self._room_id = room_id
-        data = entry.runtime_data
         scope = "home" if room_id is None else str(room_id)
         self._attr_unique_id = f"{data.home_id}_{scope}_resume_schedule"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"{data.home_id}_{scope}")},
-            name="Tado home" if room_id is None else room_name,
-            manufacturer="tado°",
+        self._attr_device_info = (
+            home_device_info(data.home_id)
+            if room_id is None
+            else room_device_info(data.home_id, room_id, room_name)
         )
 
     async def async_press(self) -> None:
         """Resume the schedule."""
-        data = self._entry.runtime_data
-        try:
-            if self._room_id is None:
-                await data.api.async_resume_all(
-                    data.home_id, data.generation, [r["id"] for r in data.rooms]
-                )
-            else:
-                await data.api.async_resume_room(
-                    data.home_id, data.generation, self._room_id
-                )
-        except TadoError as err:
-            raise HomeAssistantError(f"Resume failed: {err}") from err
-        await data.coordinator.async_request_refresh()
+        data = self._data
+        if self._room_id is None:
+            request = data.api.async_resume_all(
+                data.home_id, data.generation, data.room_ids
+            )
+        else:
+            request = data.api.async_resume_room(
+                data.home_id, data.generation, self._room_id
+            )
+        await async_run(data, request, "Resume")
 
 
 class TadoHomeActionButton(ButtonEntity):
@@ -78,24 +73,16 @@ class TadoHomeActionButton(ButtonEntity):
     _attr_has_entity_name = True
 
     def __init__(self, entry: TadoResumeConfigEntry, key: str, method: str) -> None:
-        self._entry = entry
+        self._data = data = entry.runtime_data
         self._method = method
-        data = entry.runtime_data
         self._attr_translation_key = key
         self._attr_unique_id = f"{data.home_id}_home_{key}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"{data.home_id}_home")},
-            name="Tado home",
-            manufacturer="tado°",
-        )
+        self._attr_device_info = home_device_info(data.home_id)
 
     async def async_press(self) -> None:
         """Run the quick action."""
-        data = self._entry.runtime_data
-        try:
-            await getattr(data.api, self._method)(
-                data.home_id, data.generation, [r["id"] for r in data.rooms]
-            )
-        except TadoError as err:
-            raise HomeAssistantError(f"Quick action failed: {err}") from err
-        await data.coordinator.async_request_refresh()
+        data = self._data
+        request = getattr(data.api, self._method)(
+            data.home_id, data.generation, data.room_ids
+        )
+        await async_run(data, request, "Quick action")

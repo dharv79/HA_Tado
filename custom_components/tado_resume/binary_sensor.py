@@ -1,4 +1,4 @@
-"""Device binary sensors: low battery and connectivity."""
+"""Binary sensors: low battery, connectivity and open window."""
 
 from __future__ import annotations
 
@@ -8,12 +8,10 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import TadoResumeConfigEntry
 from .capabilities import CAP_OPEN_WINDOW
-from .devices import parse_devices
-from .sensor import _DeviceEntity, room_device_info
+from .entity import TadoDeviceEntity, TadoRoomEntity
 
 
 async def async_setup_entry(
@@ -21,66 +19,53 @@ async def async_setup_entry(
     entry: TadoResumeConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Add binary sensors only for devices that report the data."""
+    """Add binary sensors only where the data exists."""
+    coordinator = entry.runtime_data.coordinator
     entities: list[BinarySensorEntity] = []
-    data = entry.runtime_data
-    for room in data.rooms:
-        if CAP_OPEN_WINDOW in data.coordinator.capabilities.get(room["id"], ()):
+    for room in entry.runtime_data.rooms:
+        if CAP_OPEN_WINDOW in coordinator.capabilities.get(room["id"], ()):
             entities.append(TadoOpenWindow(entry, room["id"], room["name"]))
-    for device in parse_devices((entry.runtime_data.coordinator.data or {}).get("devices")):
+    for serial, device in coordinator.devices.items():
         if device["battery_low"] is not None:
-            entities.append(TadoLowBattery(entry, device["serial"]))
+            entities.append(TadoDeviceBinarySensor(entry, serial, "low_battery"))
         if device["connected"] is not None:
-            entities.append(TadoConnectivity(entry, device["serial"]))
+            entities.append(TadoDeviceBinarySensor(entry, serial, "connectivity"))
     async_add_entities(entities)
 
 
-class TadoLowBattery(_DeviceEntity, BinarySensorEntity):
-    """Battery low indicator."""
-
-    _attr_device_class = BinarySensorDeviceClass.BATTERY
-
-    def __init__(self, entry, serial):
-        super().__init__(entry, serial, "low_battery")
-
-    @property
-    def is_on(self) -> bool | None:
-        device = self._device
-        return device["battery_low"] if device else None
+# unique-ID key -> (device class, field of the parsed device)
+DEVICE_SENSORS = {
+    "low_battery": (BinarySensorDeviceClass.BATTERY, "battery_low"),
+    "connectivity": (BinarySensorDeviceClass.CONNECTIVITY, "connected"),
+}
 
 
-class TadoConnectivity(_DeviceEntity, BinarySensorEntity):
-    """Connection state of a device."""
+class TadoDeviceBinarySensor(TadoDeviceEntity, BinarySensorEntity):
+    """Battery-low or connectivity state of a device."""
 
-    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
-
-    def __init__(self, entry, serial):
-        super().__init__(entry, serial, "connectivity")
+    def __init__(self, entry: TadoResumeConfigEntry, serial: str, key: str) -> None:
+        super().__init__(entry, serial, key)
+        self._attr_device_class, self._field = DEVICE_SENSORS[key]
 
     @property
     def is_on(self) -> bool | None:
         device = self._device
-        return device["connected"] if device else None
+        return device[self._field] if device else None
 
 
-class TadoOpenWindow(CoordinatorEntity, BinarySensorEntity):
+class TadoOpenWindow(TadoRoomEntity, BinarySensorEntity):
     """Open window detected in a room."""
 
-    _attr_has_entity_name = True
     _attr_name = "Open window"
     _attr_device_class = BinarySensorDeviceClass.WINDOW
 
-    def __init__(self, entry, room_id, room_name):
-        data = entry.runtime_data
-        super().__init__(data.coordinator)
-        self._room_id = room_id
-        self._attr_unique_id = f"{data.home_id}_{room_id}_open_window"
-        self._attr_device_info = room_device_info(data.home_id, room_id, room_name)
+    def __init__(self, entry: TadoResumeConfigEntry, room_id: int, room_name: str):
+        super().__init__(entry, room_id, room_name, "open_window")
 
     @property
     def is_on(self) -> bool | None:
-        room = (self.coordinator.data or {}).get("rooms", {}).get(self._room_id)
-        if room is None:
+        room = self._room
+        if not room:
             return None
         if "openWindowDetected" in room:
             return bool(room["openWindowDetected"])

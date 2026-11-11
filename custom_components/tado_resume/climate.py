@@ -14,10 +14,8 @@ from homeassistant.components.climate import (
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import config_validation as cv, entity_platform
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 import voluptuous as vol
 
 from . import TadoResumeConfigEntry
@@ -26,10 +24,10 @@ from .api import (
     TERMINATION_NEXT_BLOCK,
     TERMINATION_TIMER,
     TERMINATIONS,
-    TadoError,
 )
 from .capabilities import CAP_TARGET
-from .const import DOMAIN, SERVICE_SET_ROOM_TEMPERATURE
+from .const import SERVICE_SET_ROOM_TEMPERATURE
+from .entity import TadoRoomEntity, async_run, heating_power, number
 
 PRESET_SCHEDULE = "schedule"
 MIN_TEMP = 5.0
@@ -63,14 +61,9 @@ async def async_setup_entry(
     )
 
 
-def _number(value: Any) -> float | None:
-    return float(value) if isinstance(value, (int, float)) else None
-
-
-class TadoClimate(CoordinatorEntity, ClimateEntity):
+class TadoClimate(TadoRoomEntity, ClimateEntity):
     """A tado room (or zone) as a heating thermostat."""
 
-    _attr_has_entity_name = True
     _attr_name = None
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_min_temp = MIN_TEMP
@@ -81,16 +74,8 @@ class TadoClimate(CoordinatorEntity, ClimateEntity):
     def __init__(
         self, entry: TadoResumeConfigEntry, room_id: int, room_name: str
     ) -> None:
-        data = entry.runtime_data
-        super().__init__(data.coordinator)
-        self._data = data
-        self._room_id = room_id
-        self._attr_unique_id = f"{data.home_id}_{room_id}_climate"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"{data.home_id}_{room_id}")},
-            name=room_name,
-            manufacturer="tado°",
-        )
+        super().__init__(entry, room_id, room_name, "climate")
+        data = self._data
         features = (
             ClimateEntityFeature.TARGET_TEMPERATURE
             | ClimateEntityFeature.TURN_ON
@@ -102,10 +87,6 @@ class TadoClimate(CoordinatorEntity, ClimateEntity):
         self._attr_supported_features = features
 
     @property
-    def _room(self) -> dict[str, Any]:
-        return (self.coordinator.data or {}).get("rooms", {}).get(self._room_id, {})
-
-    @property
     def _setting(self) -> dict[str, Any]:
         return self._room.get("setting") or {}
 
@@ -115,26 +96,22 @@ class TadoClimate(CoordinatorEntity, ClimateEntity):
         return bool(room.get("manualControlTermination") or room.get("overlay"))
 
     @property
-    def available(self) -> bool:
-        return super().available and bool(self._room)
-
-    @property
     def current_temperature(self) -> float | None:
         inside = (self._room.get("sensorDataPoints") or {}).get("insideTemperature")
         inside = inside or {}
-        return _number(inside.get("value", inside.get("celsius")))
+        return number(inside.get("value", inside.get("celsius")))
 
     @property
     def current_humidity(self) -> float | None:
         humidity = (self._room.get("sensorDataPoints") or {}).get("humidity") or {}
-        return _number(humidity.get("percentage"))
+        return number(humidity.get("percentage"))
 
     @property
     def target_temperature(self) -> float | None:
         if self._setting.get("power") == "OFF":
             return None
         temp = self._setting.get("temperature") or {}
-        return _number(temp.get("value", temp.get("celsius")))
+        return number(temp.get("value", temp.get("celsius")))
 
     @property
     def hvac_mode(self) -> HVACMode:
@@ -146,11 +123,7 @@ class TadoClimate(CoordinatorEntity, ClimateEntity):
     def hvac_action(self) -> HVACAction:
         if self._setting.get("power") == "OFF":
             return HVACAction.OFF
-        power = self._room.get("heatingPower")
-        if power is None:
-            power = (self._room.get("activityDataPoints") or {}).get("heatingPower")
-        percentage = _number((power or {}).get("percentage")) or 0
-        return HVACAction.HEATING if percentage > 0 else HVACAction.IDLE
+        return HVACAction.HEATING if (heating_power(self._room) or 0) > 0 else HVACAction.IDLE
 
     @property
     def preset_mode(self) -> str | None:
@@ -161,11 +134,7 @@ class TadoClimate(CoordinatorEntity, ClimateEntity):
         return None if self._overridden else PRESET_SCHEDULE
 
     async def _call(self, coro) -> None:
-        try:
-            await coro
-        except TadoError as err:
-            raise HomeAssistantError(f"tado request failed: {err}") from err
-        await self.coordinator.async_request_refresh()
+        await async_run(self._data, coro)
 
     async def _resume(self) -> None:
         await self._call(

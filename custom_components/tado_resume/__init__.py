@@ -32,6 +32,12 @@ PLATFORMS = [
     Platform.SENSOR,
 ]
 
+HOME_SERVICES = {
+    SERVICE_RESUME_ALL: "async_resume_all",
+    SERVICE_BOOST_ALL: "async_boost_all",
+    SERVICE_TURN_OFF_ALL: "async_turn_off_all",
+}
+
 
 @dataclass
 class TadoResumeData:
@@ -42,6 +48,11 @@ class TadoResumeData:
     generation: str
     rooms: list[dict]
     coordinator: TadoCoordinator
+
+    @property
+    def room_ids(self) -> list[int]:
+        """IDs of all rooms in the home."""
+        return [room["id"] for room in self.rooms]
 
 
 type TadoResumeConfigEntry = ConfigEntry[TadoResumeData]
@@ -55,7 +66,7 @@ def _home_service(hass: HomeAssistant, method: str):
             data = loaded.runtime_data
             try:
                 await getattr(data.api, method)(
-                    data.home_id, data.generation, [r["id"] for r in data.rooms]
+                    data.home_id, data.generation, data.room_ids
                 )
             except TadoError as err:
                 raise HomeAssistantError(f"Request failed: {err}") from err
@@ -98,11 +109,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: TadoResumeConfigEntry) -
     entry.runtime_data = TadoResumeData(api, home_id, generation, rooms, coordinator)
 
     if not hass.services.has_service(DOMAIN, SERVICE_RESUME_ALL):
-        for service, method in (
-            (SERVICE_RESUME_ALL, "async_resume_all"),
-            (SERVICE_BOOST_ALL, "async_boost_all"),
-            (SERVICE_TURN_OFF_ALL, "async_turn_off_all"),
-        ):
+        for service, method in HOME_SERVICES.items():
             hass.services.async_register(DOMAIN, service, _home_service(hass, method))
 
     _remove_open_window_buttons(hass, entry)
@@ -114,6 +121,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: TadoResumeConfigEntry) 
     """Unload a config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded and not hass.config_entries.async_loaded_entries(DOMAIN):
-        for service in (SERVICE_RESUME_ALL, SERVICE_BOOST_ALL, SERVICE_TURN_OFF_ALL):
+        for service in HOME_SERVICES:
             hass.services.async_remove(DOMAIN, service)
     return unloaded

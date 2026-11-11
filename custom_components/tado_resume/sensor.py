@@ -1,47 +1,38 @@
-"""Room and device sensors."""
+"""Room, device and weather sensors."""
 
 from __future__ import annotations
-
-from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature
+from homeassistant.const import PERCENTAGE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import TadoResumeConfigEntry
 from .capabilities import CAP_HEATING_POWER, CAP_HUMIDITY
-from .const import DOMAIN
-from .devices import parse_devices
+from .entity import (
+    TadoDeviceEntity,
+    TadoEntity,
+    TadoRoomEntity,
+    heating_power,
+    home_device_info,
+    number,
+)
 
-
-def room_device_info(home_id: int, room_id: int, name: str | None = None) -> DeviceInfo:
-    """Device registry entry shared by all entities of a room."""
-    return DeviceInfo(
-        identifiers={(DOMAIN, f"{home_id}_{room_id}")},
-        name=name,
-        manufacturer="tado°",
-    )
-
-
-def device_info(home_id: int, device: dict[str, Any]) -> DeviceInfo:
-    """Device registry entry for a physical tado device."""
-    info = DeviceInfo(
-        identifiers={(DOMAIN, device["serial"])},
-        name=f"tado {device['type'] or 'device'} {device['serial']}",
-        manufacturer="tado°",
-        model=device["type"],
-        sw_version=device["firmware"],
-    )
-    if device["room_id"] is not None:
-        info["via_device"] = (DOMAIN, f"{home_id}_{device['room_id']}")
-    return info
+# Weather payload key -> (translation key, payload field, unit, device class)
+WEATHER_SENSORS = {
+    "outsideTemperature": (
+        "outside_temperature",
+        "celsius",
+        UnitOfTemperature.CELSIUS,
+        SensorDeviceClass.TEMPERATURE,
+    ),
+    "solarIntensity": ("solar_intensity", "percentage", PERCENTAGE, None),
+    "weatherState": ("weather_state", "value", None, None),
+}
 
 
 async def async_setup_entry(
@@ -51,92 +42,50 @@ async def async_setup_entry(
 ) -> None:
     """Add sensors only where the data exists."""
     data = entry.runtime_data
-    caps = data.coordinator.capabilities
+    coordinator = data.coordinator
     entities: list[SensorEntity] = []
     for room in data.rooms:
-        room_caps = caps.get(room["id"], frozenset())
+        room_caps = coordinator.capabilities.get(room["id"], frozenset())
         if CAP_HEATING_POWER in room_caps:
             entities.append(TadoHeatingPower(entry, room["id"], room["name"]))
         if CAP_HUMIDITY in room_caps:
             entities.append(TadoHumidity(entry, room["id"], room["name"]))
-    for device in parse_devices((data.coordinator.data or {}).get("devices")):
+    for serial, device in coordinator.devices.items():
         if device["firmware"]:
-            entities.append(TadoFirmware(entry, device["serial"]))
-    weather = (data.coordinator.data or {}).get("weather")
+            entities.append(TadoFirmware(entry, serial))
+    weather = (coordinator.data or {}).get("weather")
     if isinstance(weather, dict):
-        for key in WEATHER_SENSORS:
-            if key in weather:
-                entities.append(TadoWeather(entry, key))
+        entities.extend(TadoWeather(entry, key) for key in WEATHER_SENSORS if key in weather)
     async_add_entities(entities)
 
 
-WEATHER_SENSORS = ("outsideTemperature", "solarIntensity", "weatherState")
-
-
-class TadoWeather(CoordinatorEntity, SensorEntity):
+class TadoWeather(TadoEntity, SensorEntity):
     """Outside conditions reported by tado for the home location."""
 
-    _attr_has_entity_name = True
-
     def __init__(self, entry: TadoResumeConfigEntry, key: str) -> None:
-        data = entry.runtime_data
-        super().__init__(data.coordinator)
+        super().__init__(entry)
         self._key = key
-        self._attr_translation_key = {
-            "outsideTemperature": "outside_temperature",
-            "solarIntensity": "solar_intensity",
-            "weatherState": "weather_state",
-        }[key]
-        self._attr_unique_id = f"{data.home_id}_weather_{key}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"{data.home_id}_home")},
-            name="Tado home",
-            manufacturer="tado°",
-        )
-        if key == "outsideTemperature":
-            self._attr_device_class = SensorDeviceClass.TEMPERATURE
-            self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-            self._attr_state_class = SensorStateClass.MEASUREMENT
-        elif key == "solarIntensity":
-            self._attr_native_unit_of_measurement = PERCENTAGE
+        translation, self._field, unit, device_class = WEATHER_SENSORS[key]
+        self._attr_translation_key = translation
+        self._attr_unique_id = f"{self._data.home_id}_weather_{key}"
+        self._attr_device_info = home_device_info(self._data.home_id)
+        self._attr_native_unit_of_measurement = unit
+        self._attr_device_class = device_class
+        if unit is not None:
             self._attr_state_class = SensorStateClass.MEASUREMENT
 
     @property
     def native_value(self) -> float | str | None:
-        item = ((self.coordinator.data or {}).get("weather") or {}).get(self._key)
+        item = (self._state.get("weather") or {}).get(self._key)
         if not isinstance(item, dict):
             return None
-        if self._key == "outsideTemperature":
-            value = item.get("celsius")
-        elif self._key == "solarIntensity":
-            value = item.get("percentage")
-        else:
-            value = item.get("value")
+        value = item.get(self._field)
         if self._key == "weatherState":
             return str(value).lower() if value else None
-        return float(value) if isinstance(value, (int, float)) else None
+        return number(value)
 
 
-class _RoomSensor(CoordinatorEntity, SensorEntity):
-    _attr_has_entity_name = True
-
-    def __init__(self, entry: TadoResumeConfigEntry, room_id: int, room_name: str, key: str):
-        data = entry.runtime_data
-        super().__init__(data.coordinator)
-        self._room_id = room_id
-        self._attr_unique_id = f"{data.home_id}_{room_id}_{key}"
-        self._attr_device_info = room_device_info(data.home_id, room_id, room_name)
-
-    @property
-    def _room(self) -> dict[str, Any]:
-        return (self.coordinator.data or {}).get("rooms", {}).get(self._room_id, {})
-
-    @property
-    def available(self) -> bool:
-        return super().available and bool(self._room)
-
-
-class TadoHeatingPower(_RoomSensor):
+class TadoHeatingPower(TadoRoomEntity, SensorEntity):
     """Current heating power of a room."""
 
     _attr_translation_key = "heating_power"
@@ -149,14 +98,10 @@ class TadoHeatingPower(_RoomSensor):
 
     @property
     def native_value(self) -> float | None:
-        power = self._room.get("heatingPower")
-        if power is None:
-            power = (self._room.get("activityDataPoints") or {}).get("heatingPower")
-        value = (power or {}).get("percentage")
-        return float(value) if isinstance(value, (int, float)) else None
+        return heating_power(self._room)
 
 
-class TadoHumidity(_RoomSensor):
+class TadoHumidity(TadoRoomEntity, SensorEntity):
     """Room humidity."""
 
     _attr_device_class = SensorDeviceClass.HUMIDITY
@@ -169,36 +114,10 @@ class TadoHumidity(_RoomSensor):
     @property
     def native_value(self) -> float | None:
         humidity = (self._room.get("sensorDataPoints") or {}).get("humidity") or {}
-        value = humidity.get("percentage")
-        return float(value) if isinstance(value, (int, float)) else None
+        return number(humidity.get("percentage"))
 
 
-class _DeviceEntity(CoordinatorEntity):
-    _attr_has_entity_name = True
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-
-    def __init__(self, entry: TadoResumeConfigEntry, serial: str, key: str):
-        data = entry.runtime_data
-        super().__init__(data.coordinator)
-        self._home_id = data.home_id
-        self._serial = serial
-        self._attr_unique_id = f"{data.home_id}_{serial}_{key}"
-        device = self._device or {"serial": serial, "type": None, "room_id": None, "firmware": None}
-        self._attr_device_info = device_info(data.home_id, device)
-
-    @property
-    def _device(self) -> dict[str, Any] | None:
-        for device in parse_devices((self.coordinator.data or {}).get("devices")):
-            if device["serial"] == self._serial:
-                return device
-        return None
-
-    @property
-    def available(self) -> bool:
-        return super().available and self._device is not None
-
-
-class TadoFirmware(_DeviceEntity, SensorEntity):
+class TadoFirmware(TadoDeviceEntity, SensorEntity):
     """Firmware version of a device."""
 
     _attr_translation_key = "firmware"

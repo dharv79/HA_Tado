@@ -13,6 +13,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .api import TadoApi, TadoAuthError, TadoError
 from .capabilities import capability_map
 from .const import DOMAIN
+from .devices import parse_devices, tracked_mobiles
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,6 +38,8 @@ class TadoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.home_id = home_id
         self.generation = generation
         self.capabilities: dict[int, frozenset[str]] = {}
+        self.devices: dict[str, dict[str, Any]] = {}
+        self.mobiles: dict[Any, dict[str, Any]] = {}
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
@@ -48,4 +51,6 @@ class TadoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed(str(err)) from err
         self.update_interval = BASE_INTERVAL
         self.capabilities = capability_map(state)
+        self.devices = {d["serial"]: d for d in parse_devices(state.get("devices"))}
+        self.mobiles = tracked_mobiles(state.get("mobile_devices"))
         return state

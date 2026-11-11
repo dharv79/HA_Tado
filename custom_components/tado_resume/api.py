@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 import logging
 import time
@@ -282,24 +283,38 @@ class TadoApi:
         the endpoint is unavailable. Payloads are kept as returned by tado.
         """
         classic = f"{CLASSIC_API}/homes/{home_id}"
+        x_home = f"{X_API}/homes/{home_id}"
         if generation == GENERATION_X:
-            rooms = await self._request("GET", f"{X_API}/homes/{home_id}/rooms")
-            devices = await self._optional(f"{X_API}/homes/{home_id}/roomsAndDevices")
-            presence = await self._optional(f"{X_API}/homes/{home_id}/state")
+            rooms, devices, presence, weather, mobiles = await asyncio.gather(
+                self._request("GET", f"{x_home}/rooms"),
+                self._optional(f"{x_home}/roomsAndDevices"),
+                self._optional(f"{x_home}/state"),
+                self._optional(f"{classic}/weather"),
+                self._optional(f"{classic}/mobileDevices"),
+            )
         else:
-            zones = await self._request("GET", f"{classic}/zones")
-            rooms = []
-            for zone in zones or []:
-                state = await self._optional(f"{classic}/zones/{zone['id']}/state")
-                rooms.append({**zone, **(state or {})})
-            devices = await self._optional(f"{classic}/devices")
-            presence = await self._optional(f"{classic}/state")
+            zones, devices, presence, weather, mobiles = await asyncio.gather(
+                self._request("GET", f"{classic}/zones"),
+                self._optional(f"{classic}/devices"),
+                self._optional(f"{classic}/state"),
+                self._optional(f"{classic}/weather"),
+                self._optional(f"{classic}/mobileDevices"),
+            )
+            states = await asyncio.gather(
+                *(
+                    self._optional(f"{classic}/zones/{zone['id']}/state")
+                    for zone in zones or []
+                )
+            )
+            rooms = [
+                {**zone, **(state or {})} for zone, state in zip(zones or [], states)
+            ]
         return {
             "rooms": {room["id"]: room for room in rooms or []},
             "devices": devices,
             "presence": presence,
-            "weather": await self._optional(f"{classic}/weather"),
-            "mobile_devices": await self._optional(f"{classic}/mobileDevices"),
+            "weather": weather,
+            "mobile_devices": mobiles,
         }
 
     async def async_set_manual(
