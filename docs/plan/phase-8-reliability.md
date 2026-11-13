@@ -11,3 +11,9 @@ Confirm what tado returns for an expired refresh token (`invalid_grant`) and how
 
 ## Exit criteria
 Expired token triggers a reauth prompt; entry recovers without losing entities.
+
+## Outcome (0.10.0)
+- Token endpoint 400/401/403 raise `TadoAuthError` (including `invalid_grant`), which raises `ConfigEntryAuthFailed` in setup and the coordinator, starting the reauth flow. Not verified against a live expired token.
+- `reauth_confirm` repeats the device login, checks the configured home is still visible to the account (`wrong_account` otherwise), updates the stored token and reloads, keeping entities.
+- Repair issue `api_unreachable_<home>` after one hour of continuous non-auth failures; cleared on success or unload.
+- Diagnostic sensor "Last successful update" on the home device; stays available while the API fails.

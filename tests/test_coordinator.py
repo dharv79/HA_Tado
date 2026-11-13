@@ -79,3 +79,44 @@ async def test_diagnostics_redacted(hass: HomeAssistant) -> None:
     text = json.dumps(await async_get_config_entry_diagnostics(hass, entry))
     for secret in ("secret-r", "RU0000000000", "Phone", "Hall"):
         assert secret not in text
+
+
+async def test_repair_issue_after_sustained_failure(hass: HomeAssistant) -> None:
+    from datetime import timedelta
+
+    from homeassistant.helpers import issue_registry as ir
+    from homeassistant.util import dt as dt_util
+
+    entry = await _setup(hass)
+    coordinator = entry.runtime_data.coordinator
+    registry = ir.async_get(hass)
+    issue_id = "api_unreachable_1"
+    start = dt_util.utcnow()
+    with patch.object(
+        coordinator.api, "async_get_state", AsyncMock(side_effect=TadoError("x"))
+    ):
+        await coordinator.async_refresh()
+        assert registry.async_get_issue(DOMAIN, issue_id) is None
+        with patch(
+            "custom_components.tado_resume.coordinator.dt_util.utcnow",
+            return_value=start + timedelta(hours=1, minutes=1),
+        ):
+            await coordinator.async_refresh()
+        assert registry.async_get_issue(DOMAIN, issue_id) is not None
+    with patch.object(coordinator.api, "async_get_state", AsyncMock(return_value=STATE)):
+        await coordinator.async_refresh()
+    assert registry.async_get_issue(DOMAIN, issue_id) is None
+    assert coordinator.last_success is not None
+
+
+async def test_last_update_sensor_stays_available(hass: HomeAssistant) -> None:
+    entry = await _setup(hass)
+    coordinator = entry.runtime_data.coordinator
+    state = hass.states.get("sensor.tado_home_last_successful_update")
+    assert state is not None and state.state != "unavailable"
+    with patch.object(
+        coordinator.api, "async_get_state", AsyncMock(side_effect=TadoError("x"))
+    ):
+        await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.tado_home_last_successful_update").state != "unavailable"

@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 import logging
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .api import TadoApi, TadoAuthError, TadoError
 from .capabilities import capability_map
@@ -19,6 +21,8 @@ _LOGGER = logging.getLogger(__name__)
 
 BASE_INTERVAL = timedelta(seconds=60)
 MAX_INTERVAL = timedelta(minutes=15)
+FAILURE_REPAIR_AFTER = timedelta(hours=1)
+ISSUE_API_UNREACHABLE = "api_unreachable"
 
 
 class TadoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -40,6 +44,8 @@ class TadoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.capabilities: dict[int, frozenset[str]] = {}
         self.devices: dict[str, dict[str, Any]] = {}
         self.mobiles: dict[Any, dict[str, Any]] = {}
+        self.last_success: datetime | None = None
+        self._failing_since: datetime | None = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
@@ -48,9 +54,34 @@ class TadoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise ConfigEntryAuthFailed from err
         except TadoError as err:
             self.update_interval = min(self.update_interval * 2, MAX_INTERVAL)
+            self._note_failure()
             raise UpdateFailed(str(err)) from err
         self.update_interval = BASE_INTERVAL
+        self.last_success = dt_util.utcnow()
+        self._failing_since = None
+        self.clear_issue()
         self.capabilities = capability_map(state)
         self.devices = {d["serial"]: d for d in parse_devices(state.get("devices"))}
         self.mobiles = tracked_mobiles(state.get("mobile_devices"))
         return state
+
+    def _note_failure(self) -> None:
+        """Raise a repair issue once the API has failed for a sustained period."""
+        now = dt_util.utcnow()
+        if self._failing_since is None:
+            self._failing_since = now
+        if now - self._failing_since >= FAILURE_REPAIR_AFTER:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                f"{ISSUE_API_UNREACHABLE}_{self.home_id}",
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key=ISSUE_API_UNREACHABLE,
+            )
+
+    def clear_issue(self) -> None:
+        """Remove the repair issue, if present."""
+        ir.async_delete_issue(
+            self.hass, DOMAIN, f"{ISSUE_API_UNREACHABLE}_{self.home_id}"
+        )
