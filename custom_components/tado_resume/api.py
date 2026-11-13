@@ -47,6 +47,8 @@ _CLASSIC_TERMINATION = {
 }
 
 _TOKEN_MARGIN = 30
+OPTIONAL_BACKOFF = 1800  # seconds to leave a failing optional endpoint alone
+MAX_RETRY_AFTER = 3600
 
 
 class TadoError(Exception):
@@ -55,6 +57,14 @@ class TadoError(Exception):
 
 class TadoAuthError(TadoError):
     """Authentication failed; the user must log in again."""
+
+
+class TadoRateLimitError(TadoError):
+    """tado answered 429; retry_after is the requested wait in seconds, if given."""
+
+    def __init__(self, message: str, retry_after: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 class TadoAuthPending(TadoError):
@@ -102,6 +112,17 @@ async def _token_request(session: aiohttp.ClientSession, data: dict[str, str]) -
         raise TadoError(f"Token request failed ({resp.status})")
 
 
+def _retry_after(value: str | None) -> float | None:
+    """Parse a Retry-After header given in seconds."""
+    try:
+        seconds = float(value) if value is not None else None
+    except ValueError:
+        return None
+    if seconds is None or seconds < 0:
+        return None
+    return min(seconds, MAX_RETRY_AFTER)
+
+
 class TadoApi:
     """Authenticated tado client."""
 
@@ -117,6 +138,8 @@ class TadoApi:
         self._access_token: str | None = None
         self._expires_at = 0.0
         self._refresh_lock = asyncio.Lock()
+        self._optional_until: dict[str, float] = {}
+        self._optional_last: dict[str, Any] = {}
 
     async def _async_ensure_token(self, stale: str | None = None) -> str:
         """Return a valid access token, refreshing at most once concurrently.
@@ -171,6 +194,11 @@ class TadoApi:
                         url,
                         resp.status,
                         (await resp.text())[:200],
+                    )
+                if resp.status == 429:
+                    raise TadoRateLimitError(
+                        f"{method} {url} rate limited (429)",
+                        _retry_after(resp.headers.get("Retry-After")),
                     )
                 if resp.status >= 400:
                     detail = (await resp.text())[:300]
@@ -249,13 +277,23 @@ class TadoApi:
             )
 
     async def _optional(self, url: str) -> Any:
-        """GET an endpoint that may be unavailable for some homes."""
+        """GET an endpoint that may be unavailable for some homes.
+
+        After a failure the endpoint is skipped for OPTIONAL_BACKOFF seconds and
+        the last good payload (if any) is returned instead.
+        """
+        if time.monotonic() < self._optional_until.get(url, 0.0):
+            return self._optional_last.get(url)
         try:
-            return await self._request("GET", url)
-        except TadoAuthError:
+            data = await self._request("GET", url)
+        except (TadoAuthError, TadoRateLimitError):
             raise
         except TadoError:
-            return None
+            self._optional_until[url] = time.monotonic() + OPTIONAL_BACKOFF
+            return self._optional_last.get(url)
+        self._optional_until.pop(url, None)
+        self._optional_last[url] = data
+        return data
 
     async def async_get_state(self, home_id: int, generation: str) -> dict[str, Any]:
         """Return a snapshot of the home: rooms, devices, presence, weather.
