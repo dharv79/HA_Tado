@@ -83,6 +83,17 @@
       },
       "heating_run_time": {
         "name": "Heating run time today"
+      },
+      "dew_point": {
+        "name": "Dew point"
+      },
+      "mould_risk": {
+        "name": "Mould risk",
+        "state": {
+          "low": "Low",
+          "medium": "Medium",
+          "high": "High"
+        }
       }
     },
     "number": {
