@@ -39,3 +39,10 @@ set_room_temperature:
 boost_all_rooms:
 
 turn_off_all_rooms:
+
+set_away_until:
+  fields:
+    until:
+      required: true
+      selector:
+        datetime:

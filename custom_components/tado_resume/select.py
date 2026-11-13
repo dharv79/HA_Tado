@@ -57,6 +57,8 @@ class TadoPresence(TadoEntity, SelectEntity):
     async def async_select_option(self, option: str) -> None:
         """Change presence."""
         data = self._data
+        if data.away:
+            await data.away.async_cancel()
         await async_run(
             data,
             data.api.async_set_presence(data.home_id, data.generation, option),
