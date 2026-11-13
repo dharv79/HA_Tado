@@ -74,6 +74,12 @@
       },
       "override_remaining": {
         "name": "Override time remaining"
+      },
+      "next_schedule_change": {
+        "name": "Next schedule change"
+      },
+      "next_schedule_temperature": {
+        "name": "Next scheduled temperature"
       }
     },
     "number": {

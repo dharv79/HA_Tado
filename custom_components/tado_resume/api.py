@@ -47,6 +47,7 @@ _CLASSIC_TERMINATION = {
 }
 
 _TOKEN_MARGIN = 30
+SCHEDULE_TTL = 3600  # seconds a fetched timetable is reused
 OPTIONAL_BACKOFF = 1800  # seconds to leave a failing optional endpoint alone
 MAX_RETRY_AFTER = 3600
 
@@ -140,6 +141,7 @@ class TadoApi:
         self._refresh_lock = asyncio.Lock()
         self._optional_until: dict[str, float] = {}
         self._optional_last: dict[str, Any] = {}
+        self._schedules: dict[int, tuple[float, dict[str, Any] | None]] = {}
 
     async def _async_ensure_token(self, stale: str | None = None) -> str:
         """Return a valid access token, refreshing at most once concurrently.
@@ -319,6 +321,24 @@ class TadoApi:
         self._optional_last[url] = data
         return data
 
+    async def _schedule(self, home_id: int, zone_id: int) -> dict[str, Any] | None:
+        """Active timetable of a classic zone, cached for SCHEDULE_TTL seconds."""
+        cached = self._schedules.get(zone_id)
+        if cached and time.monotonic() < cached[0]:
+            return cached[1]
+        base = f"{CLASSIC_API}/homes/{home_id}/zones/{zone_id}/schedule"
+        result: dict[str, Any] | None = None
+        try:
+            active = await self._request("GET", f"{base}/activeTimetable")
+            blocks = await self._request("GET", f"{base}/timetables/{active['id']}/blocks")
+            result = {"type": active.get("type"), "blocks": blocks}
+        except (TadoAuthError, TadoRateLimitError):
+            raise
+        except (TadoError, KeyError, AttributeError, TypeError):
+            result = cached[1] if cached else None
+        self._schedules[zone_id] = (time.monotonic() + SCHEDULE_TTL, result)
+        return result
+
     async def async_get_state(self, home_id: int, generation: str) -> dict[str, Any]:
         """Return a snapshot of the home: rooms, devices, presence, weather.
 
@@ -346,8 +366,12 @@ class TadoApi:
             states = await asyncio.gather(
                 *(self._optional(f"{classic}/zones/{zone['id']}/state") for zone in zones or [])
             )
+            schedules = await asyncio.gather(
+                *(self._schedule(home_id, zone["id"]) for zone in zones or [])
+            )
             rooms = [
-                {**zone, **(state or {})} for zone, state in zip(zones or [], states, strict=False)
+                {**zone, **(state or {}), **({"schedule": sched} if sched else {})}
+                for zone, state, sched in zip(zones or [], states, schedules, strict=False)
             ]
         return {
             "rooms": {room["id"]: room for room in rooms or []},
