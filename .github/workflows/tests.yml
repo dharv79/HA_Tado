@@ -7,6 +7,17 @@ on:
 permissions:
   contents: read
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements_test.txt
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy
   test:
     runs-on: ubuntu-latest
     steps:
@@ -15,4 +26,18 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install -r requirements_test.txt
-      - run: pytest -q
+      - run: pytest -q --cov --cov-fail-under=85
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: home-assistant/actions/hassfest@master
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: hacs/action@main
+        with:
+          category: integration
+          # Repository settings and brand icon; re-enable once set (see docs/plan/phase-17-quality.md)
+          ignore: brands topics description

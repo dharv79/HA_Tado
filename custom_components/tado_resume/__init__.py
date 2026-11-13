@@ -12,7 +12,6 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import TadoApi, TadoAuthError, TadoError
-from .coordinator import TadoCoordinator
 from .const import (
     CONF_GENERATION,
     CONF_HOME_ID,
@@ -22,6 +21,7 @@ from .const import (
     SERVICE_RESUME_ALL,
     SERVICE_TURN_OFF_ALL,
 )
+from .coordinator import TadoCoordinator
 
 PLATFORMS = [
     Platform.BINARY_SENSOR,
@@ -65,9 +65,7 @@ def _home_service(hass: HomeAssistant, method: str):
         for loaded in hass.config_entries.async_loaded_entries(DOMAIN):
             data = loaded.runtime_data
             try:
-                await getattr(data.api, method)(
-                    data.home_id, data.generation, data.room_ids
-                )
+                await getattr(data.api, method)(data.home_id, data.generation, data.room_ids)
             except TadoError as err:
                 raise HomeAssistantError(f"Request failed: {err}") from err
             await data.coordinator.async_request_refresh()
@@ -91,9 +89,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: TadoResumeConfigEntry) -
             entry, data={**entry.data, CONF_REFRESH_TOKEN: token}
         )
 
-    api = TadoApi(
-        async_get_clientsession(hass), entry.data[CONF_REFRESH_TOKEN], _store_token
-    )
+    api = TadoApi(async_get_clientsession(hass), entry.data[CONF_REFRESH_TOKEN], _store_token)
     home_id = entry.data[CONF_HOME_ID]
     generation = entry.data[CONF_GENERATION]
     try:

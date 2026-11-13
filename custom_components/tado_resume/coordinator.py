@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -53,7 +53,7 @@ class TadoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except TadoAuthError as err:
             raise ConfigEntryAuthFailed from err
         except TadoError as err:
-            self.update_interval = min(self.update_interval * 2, MAX_INTERVAL)
+            self.update_interval = min((self.update_interval or BASE_INTERVAL) * 2, MAX_INTERVAL)
             self._note_failure()
             raise UpdateFailed(str(err)) from err
         self.update_interval = BASE_INTERVAL
@@ -82,6 +82,4 @@ class TadoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def clear_issue(self) -> None:
         """Remove the repair issue, if present."""
-        ir.async_delete_issue(
-            self.hass, DOMAIN, f"{ISSUE_API_UNREACHABLE}_{self.home_id}"
-        )
+        ir.async_delete_issue(self.hass, DOMAIN, f"{ISSUE_API_UNREACHABLE}_{self.home_id}")

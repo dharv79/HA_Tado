@@ -26,12 +26,15 @@ async def _setup(hass: HomeAssistant, state=STATE):
         data={"home_id": 1, "generation": "LINE_X", "refresh_token": "secret-r"},
     )
     entry.add_to_hass(hass)
-    with patch(
-        "custom_components.tado_resume.TadoApi.async_get_rooms",
-        AsyncMock(return_value=[{"id": 5, "name": "Hall"}]),
-    ), patch(
-        "custom_components.tado_resume.TadoApi.async_get_state",
-        AsyncMock(return_value=state),
+    with (
+        patch(
+            "custom_components.tado_resume.TadoApi.async_get_rooms",
+            AsyncMock(return_value=[{"id": 5, "name": "Hall"}]),
+        ),
+        patch(
+            "custom_components.tado_resume.TadoApi.async_get_state",
+            AsyncMock(return_value=state),
+        ),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
@@ -54,9 +57,7 @@ def test_capabilities_minimal_room() -> None:
 async def test_backoff_and_reset(hass: HomeAssistant) -> None:
     entry = await _setup(hass)
     coordinator = entry.runtime_data.coordinator
-    with patch.object(
-        coordinator.api, "async_get_state", AsyncMock(side_effect=TadoError("x"))
-    ):
+    with patch.object(coordinator.api, "async_get_state", AsyncMock(side_effect=TadoError("x"))):
         for _ in range(10):
             await coordinator.async_refresh()
     assert coordinator.update_interval == MAX_INTERVAL
@@ -68,9 +69,10 @@ async def test_backoff_and_reset(hass: HomeAssistant) -> None:
 async def test_auth_error_raises_auth_failed(hass: HomeAssistant) -> None:
     entry = await _setup(hass)
     coordinator = entry.runtime_data.coordinator
-    with patch.object(
-        coordinator.api, "async_get_state", AsyncMock(side_effect=TadoAuthError("x"))
-    ), pytest.raises(ConfigEntryAuthFailed):
+    with (
+        patch.object(coordinator.api, "async_get_state", AsyncMock(side_effect=TadoAuthError("x"))),
+        pytest.raises(ConfigEntryAuthFailed),
+    ):
         await coordinator._async_update_data()
 
 
@@ -92,9 +94,7 @@ async def test_repair_issue_after_sustained_failure(hass: HomeAssistant) -> None
     registry = ir.async_get(hass)
     issue_id = "api_unreachable_1"
     start = dt_util.utcnow()
-    with patch.object(
-        coordinator.api, "async_get_state", AsyncMock(side_effect=TadoError("x"))
-    ):
+    with patch.object(coordinator.api, "async_get_state", AsyncMock(side_effect=TadoError("x"))):
         await coordinator.async_refresh()
         assert registry.async_get_issue(DOMAIN, issue_id) is None
         with patch(
@@ -114,9 +114,7 @@ async def test_last_update_sensor_stays_available(hass: HomeAssistant) -> None:
     coordinator = entry.runtime_data.coordinator
     state = hass.states.get("sensor.tado_home_last_successful_update")
     assert state is not None and state.state != "unavailable"
-    with patch.object(
-        coordinator.api, "async_get_state", AsyncMock(side_effect=TadoError("x"))
-    ):
+    with patch.object(coordinator.api, "async_get_state", AsyncMock(side_effect=TadoError("x"))):
         await coordinator.async_refresh()
     await hass.async_block_till_done()
     assert hass.states.get("sensor.tado_home_last_successful_update").state != "unavailable"

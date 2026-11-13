@@ -44,12 +44,15 @@ async def _setup(hass, room, devices, generation="LINE_X"):
         data={"home_id": 1, "generation": generation, "refresh_token": "r"},
     )
     entry.add_to_hass(hass)
-    with patch(
-        "custom_components.tado_resume.TadoApi.async_get_rooms",
-        AsyncMock(return_value=[{"id": 5, "name": "Hall"}]),
-    ), patch(
-        "custom_components.tado_resume.TadoApi.async_get_state",
-        AsyncMock(return_value={"rooms": {5: room}, "devices": devices}),
+    with (
+        patch(
+            "custom_components.tado_resume.TadoApi.async_get_rooms",
+            AsyncMock(return_value=[{"id": 5, "name": "Hall"}]),
+        ),
+        patch(
+            "custom_components.tado_resume.TadoApi.async_get_state",
+            AsyncMock(return_value={"rooms": {5: room}, "devices": devices}),
+        ),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
@@ -62,18 +65,19 @@ def _unique_ids(hass):
 async def test_x_entities(hass) -> None:
     await _setup(hass, ROOM, DEVICES_X)
     ids = _unique_ids(hass)
-    assert {"1_5_heating_power", "1_5_humidity", "1_RU1_firmware",
-            "1_RU1_low_battery", "1_RU1_connectivity"} <= ids
+    assert {
+        "1_5_heating_power",
+        "1_5_humidity",
+        "1_RU1_firmware",
+        "1_RU1_low_battery",
+        "1_RU1_connectivity",
+    } <= ids
     assert not any(i.startswith("1_IB1") for i in ids)
     assert hass.states.get("sensor.hall_heating_power").state == "40.0"
     assert hass.states.get("sensor.hall_humidity").state == "48.0"
-    battery = next(
-        s for s in hass.states.async_all("binary_sensor") if "battery" in s.entity_id
-    )
+    battery = next(s for s in hass.states.async_all("binary_sensor") if "battery" in s.entity_id)
     assert battery.state == "on"
-    conn = next(
-        s for s in hass.states.async_all("binary_sensor") if "connectivity" in s.entity_id
-    )
+    conn = next(s for s in hass.states.async_all("binary_sensor") if "connectivity" in s.entity_id)
     assert conn.state == "on"
 
 
@@ -94,7 +98,10 @@ async def test_classic_devices(hass) -> None:
 async def test_no_data_no_entities(hass) -> None:
     await _setup(hass, {"id": 5, "name": "Hall", "setting": {"power": "ON"}}, None)
     ids = _unique_ids(hass)
-    assert not any(i.endswith(("heating_power", "humidity", "firmware", "low_battery", "connectivity")) for i in ids)
+    assert not any(
+        i.endswith(("heating_power", "humidity", "firmware", "low_battery", "connectivity"))
+        for i in ids
+    )
 
 
 def test_parse_devices_flat_without_optional_fields() -> None:

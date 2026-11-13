@@ -6,7 +6,6 @@ from collections.abc import Mapping
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -45,9 +44,7 @@ class TadoResumeConfigFlow(ConfigFlow, domain=DOMAIN):
                 return self.async_abort(reason="cannot_connect")
         else:
             try:
-                tokens = await async_poll_device_flow(
-                    session, self._device["device_code"]
-                )
+                tokens = await async_poll_device_flow(session, self._device["device_code"])
             except TadoAuthPending:
                 errors["base"] = "not_authorised"
             except TadoAuthError:
@@ -69,17 +66,13 @@ class TadoResumeConfigFlow(ConfigFlow, domain=DOMAIN):
             },
         )
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Start the device login and show the URL to the user."""
         if (result := await self._async_login("user", user_input)) is not None:
             return result
         return await self._async_pick_home()
 
-    async def async_step_reauth(
-        self, entry_data: Mapping[str, Any]
-    ) -> ConfigFlowResult:
+    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
         """Start reauthentication after tado rejected the stored token."""
         return await self.async_step_reauth_confirm()
 
@@ -94,9 +87,7 @@ class TadoResumeConfigFlow(ConfigFlow, domain=DOMAIN):
         async def _rotated(token: str) -> None:
             self._refresh_token = token
 
-        api = TadoApi(
-            async_get_clientsession(self.hass), self._refresh_token or "", _rotated
-        )
+        api = TadoApi(async_get_clientsession(self.hass), self._refresh_token or "", _rotated)
         try:
             homes = await api.async_get_homes()
         except TadoAuthError:
@@ -129,9 +120,7 @@ class TadoResumeConfigFlow(ConfigFlow, domain=DOMAIN):
             return await self._async_create(self._homes[0], api)
         return await self.async_step_home()
 
-    async def async_step_home(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_home(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Choose a home when the account has several."""
         if user_input is not None:
             home = next(h for h in self._homes if str(h["id"]) == user_input["home"])

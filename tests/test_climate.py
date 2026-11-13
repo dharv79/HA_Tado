@@ -37,12 +37,15 @@ async def _setup(hass, request, room, generation="LINE_X"):
     )
     refresh.start()
     request.addfinalizer(refresh.stop)
-    with patch(
-        "custom_components.tado_resume.TadoApi.async_get_rooms",
-        AsyncMock(return_value=[{"id": 5, "name": "Hall"}]),
-    ), patch(
-        "custom_components.tado_resume.TadoApi.async_get_state",
-        AsyncMock(return_value={"rooms": {5: room}}),
+    with (
+        patch(
+            "custom_components.tado_resume.TadoApi.async_get_rooms",
+            AsyncMock(return_value=[{"id": 5, "name": "Hall"}]),
+        ),
+        patch(
+            "custom_components.tado_resume.TadoApi.async_get_state",
+            AsyncMock(return_value={"rooms": {5: room}}),
+        ),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
@@ -70,9 +73,7 @@ async def test_off_and_override_states(hass: HomeAssistant, request) -> None:
 
 async def test_set_temperature(hass: HomeAssistant, request) -> None:
     await _setup(hass, request, ROOM_X)
-    with patch(
-        "custom_components.tado_resume.TadoApi.async_set_manual", AsyncMock()
-    ) as call:
+    with patch("custom_components.tado_resume.TadoApi.async_set_manual", AsyncMock()) as call:
         await hass.services.async_call(
             "climate",
             "set_temperature",
@@ -84,9 +85,7 @@ async def test_set_temperature(hass: HomeAssistant, request) -> None:
 
 async def test_set_room_temperature_timer(hass: HomeAssistant, request) -> None:
     await _setup(hass, request, ROOM_X)
-    with patch(
-        "custom_components.tado_resume.TadoApi.async_set_manual", AsyncMock()
-    ) as call:
+    with patch("custom_components.tado_resume.TadoApi.async_set_manual", AsyncMock()) as call:
         await hass.services.async_call(
             DOMAIN,
             "set_room_temperature",
@@ -114,13 +113,11 @@ async def test_timer_requires_duration(hass: HomeAssistant, request) -> None:
 
 async def test_hvac_modes_and_boost(hass: HomeAssistant, request) -> None:
     await _setup(hass, request, ROOM_X)
-    with patch(
-        "custom_components.tado_resume.TadoApi.async_set_manual", AsyncMock()
-    ) as manual, patch(
-        "custom_components.tado_resume.TadoApi.async_resume_room", AsyncMock()
-    ) as resume, patch(
-        "custom_components.tado_resume.TadoApi.async_boost_room", AsyncMock()
-    ) as boost:
+    with (
+        patch("custom_components.tado_resume.TadoApi.async_set_manual", AsyncMock()) as manual,
+        patch("custom_components.tado_resume.TadoApi.async_resume_room", AsyncMock()) as resume,
+        patch("custom_components.tado_resume.TadoApi.async_boost_room", AsyncMock()) as boost,
+    ):
         await hass.services.async_call(
             "climate", "set_hvac_mode", {"entity_id": ENTITY, "hvac_mode": "off"}, blocking=True
         )
@@ -130,17 +127,23 @@ async def test_hvac_modes_and_boost(hass: HomeAssistant, request) -> None:
         )
         resume.assert_awaited_once_with(1, "LINE_X", 5)
         await hass.services.async_call(
-            "climate", "set_preset_mode", {"entity_id": ENTITY, "preset_mode": "boost"}, blocking=True
+            "climate",
+            "set_preset_mode",
+            {"entity_id": ENTITY, "preset_mode": "boost"},
+            blocking=True,
         )
         boost.assert_awaited_once_with(1, "LINE_X", 5)
 
 
 async def test_api_error_raises(hass: HomeAssistant, request) -> None:
     await _setup(hass, request, ROOM_X)
-    with patch(
-        "custom_components.tado_resume.TadoApi.async_set_manual",
-        AsyncMock(side_effect=TadoError("boom")),
-    ), pytest.raises(HomeAssistantError):
+    with (
+        patch(
+            "custom_components.tado_resume.TadoApi.async_set_manual",
+            AsyncMock(side_effect=TadoError("boom")),
+        ),
+        pytest.raises(HomeAssistantError),
+    ):
         await hass.services.async_call(
             "climate", "set_temperature", {"entity_id": ENTITY, "temperature": 21}, blocking=True
         )
