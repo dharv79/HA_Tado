@@ -1,8 +1,8 @@
-## 0.12.0
+## 0.13.0
 
-Fewer API calls.
+Device settings.
 
-- Polling slows to three times the configured interval while the home is set to Away.
-- A 429 response is honoured: polling waits for `Retry-After` (capped at one hour) before the next request.
-- Optional endpoints (weather, mobile devices, device list, home state) that fail are left alone for 30 minutes; the last good data is kept meanwhile.
-- Writes still trigger an immediate refresh, so state stays current after a change.
+- New temperature offset control (number, configuration category) for each tado X device that reports an offset.
+- New child lock switch (configuration category) for each device that reports a child lock, on tado X and classic.
+- Entities are only created where tado reports the value; devices without it get nothing.
+- Display and LED controls are not included: no write endpoint has been identified.

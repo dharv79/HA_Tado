@@ -69,6 +69,16 @@
       "last_update": {
         "name": "Last successful update"
       }
+    },
+    "number": {
+      "temperature_offset": {
+        "name": "Temperature offset"
+      }
+    },
+    "switch": {
+      "child_lock": {
+        "name": "Child lock"
+      }
     }
   },
   "services": {
