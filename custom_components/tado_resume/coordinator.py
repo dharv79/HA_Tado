@@ -12,7 +12,7 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .api import TadoApi, TadoAuthError, TadoError
+from .api import TadoApi, TadoAuthError, TadoError, TadoRateLimitError
 from .capabilities import capability_map
 from .const import CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL, DOMAIN
 from .devices import parse_devices, tracked_mobiles
@@ -20,6 +20,7 @@ from .devices import parse_devices, tracked_mobiles
 _LOGGER = logging.getLogger(__name__)
 
 MAX_INTERVAL = timedelta(minutes=15)
+AWAY_FACTOR = 3  # poll this many times slower while the home is away
 FAILURE_REPAIR_AFTER = timedelta(hours=1)
 ISSUE_API_UNREACHABLE = "api_unreachable"
 
@@ -54,13 +55,16 @@ class TadoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except TadoAuthError as err:
             raise ConfigEntryAuthFailed from err
         except TadoError as err:
-            self.update_interval = min(
+            backoff = min(
                 (self.update_interval or self.base_interval) * 2,
                 max(MAX_INTERVAL, self.base_interval),
             )
+            if isinstance(err, TadoRateLimitError) and err.retry_after:
+                backoff = max(backoff, timedelta(seconds=err.retry_after))
+            self.update_interval = backoff
             self._note_failure()
             raise UpdateFailed(str(err)) from err
-        self.update_interval = self.base_interval
+        self.update_interval = self._steady_interval(state)
         self.last_success = dt_util.utcnow()
         self._failing_since = None
         self.clear_issue()
@@ -68,6 +72,13 @@ class TadoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.devices = {d["serial"]: d for d in parse_devices(state.get("devices"))}
         self.mobiles = tracked_mobiles(state.get("mobile_devices"))
         return state
+
+    def _steady_interval(self, state: dict[str, Any]) -> timedelta:
+        """Poll slower while the home is away; nothing changes quickly then."""
+        presence = state.get("presence")
+        if isinstance(presence, dict) and str(presence.get("presence", "")).upper() == "AWAY":
+            return self.base_interval * AWAY_FACTOR
+        return self.base_interval
 
     def _note_failure(self) -> None:
         """Raise a repair issue once the API has failed for a sustained period."""

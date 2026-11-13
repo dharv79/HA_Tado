@@ -16,6 +16,7 @@ from custom_components.tado_resume.api import (
     TadoAuthError,
     TadoAuthPending,
     TadoError,
+    TadoRateLimitError,
     async_poll_device_flow,
 )
 
@@ -133,3 +134,43 @@ async def test_concurrent_requests_refresh_token_once(session):
         await asyncio.gather(*(api.async_get_rooms(1, GENERATION_X) for _ in range(5)))
         posts = [k for k in m.requests if k[0] == "POST"]
     assert len(posts) == 1
+
+
+async def test_rate_limit_carries_retry_after(session):
+    api = TadoApi(session, "r")
+    api._access_token, api._expires_at = "a", 10**12
+    with aioresponses() as m:
+        m.get(f"{CLASSIC_API}/me", status=429, headers={"Retry-After": "120"})
+        m.get(f"{CLASSIC_API}/me", status=429, headers={"Retry-After": "soon"})
+        with pytest.raises(TadoRateLimitError) as err:
+            await api.async_get_homes()
+        assert err.value.retry_after == 120
+        with pytest.raises(TadoRateLimitError) as err:
+            await api.async_get_homes()
+        assert err.value.retry_after is None
+
+
+async def test_optional_endpoint_backs_off_and_serves_last_value() -> None:
+    api = TadoApi(None, "r")
+    calls: list[str] = []
+    fail = False
+
+    async def fake(method, url, json=None):
+        calls.append(url)
+        if fail:
+            raise TadoError("down")
+        return {"v": 1}
+
+    api._request = fake
+    assert await api._optional("u") == {"v": 1}
+    fail = True
+    api._optional_until.clear()
+    assert await api._optional("u") == {"v": 1}  # failed, last value served
+    assert len(calls) == 2
+    assert await api._optional("u") == {"v": 1}  # skipped during back-off
+    assert len(calls) == 2
+    api._optional_until["u"] = 0.0
+    fail = False
+    assert await api._optional("u") == {"v": 1}
+    assert len(calls) == 3
+    assert "u" not in api._optional_until

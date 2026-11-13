@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.tado_resume.api import TadoAuthError, TadoError
+from custom_components.tado_resume.api import TadoAuthError, TadoError, TadoRateLimitError
 from custom_components.tado_resume.capabilities import room_capabilities
 from custom_components.tado_resume.const import DEFAULT_POLL_INTERVAL, DOMAIN
 from custom_components.tado_resume.coordinator import MAX_INTERVAL
@@ -119,3 +119,21 @@ async def test_last_update_sensor_stays_available(hass: HomeAssistant) -> None:
         await coordinator.async_refresh()
     await hass.async_block_till_done()
     assert hass.states.get("sensor.tado_home_last_successful_update").state != "unavailable"
+
+
+async def test_away_home_polls_slower_and_rate_limit_is_honoured(hass: HomeAssistant) -> None:
+    away = {**STATE, "presence": {"presence": "AWAY"}}
+    entry = await _setup(hass, away)
+    coordinator = entry.runtime_data.coordinator
+    base = timedelta(seconds=DEFAULT_POLL_INTERVAL)
+    assert coordinator.update_interval == base * 3
+
+    with patch.object(
+        coordinator.api, "async_get_state", AsyncMock(side_effect=TadoRateLimitError("x", 600))
+    ):
+        await coordinator.async_refresh()
+    assert coordinator.update_interval == timedelta(seconds=600)
+
+    with patch.object(coordinator.api, "async_get_state", AsyncMock(return_value=STATE)):
+        await coordinator.async_refresh()
+    assert coordinator.update_interval == base
