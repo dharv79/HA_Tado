@@ -68,6 +68,8 @@ async def async_setup_entry(
     weather = (coordinator.data or {}).get("weather")
     if isinstance(weather, dict):
         entities.extend(TadoWeather(entry, key) for key in WEATHER_SENSORS if key in weather)
+    if isinstance((coordinator.data or {}).get("run_time"), dict):
+        entities.append(TadoRunTime(entry))
     entities.append(TadoLastUpdate(entry))
     async_add_entities(entities)
 
@@ -234,6 +236,31 @@ class TadoFirmware(TadoDeviceEntity, SensorEntity):
     def native_value(self) -> str | None:
         device = self._device
         return device["firmware"] if device else None
+
+
+class TadoRunTime(TadoEntity, SensorEntity):
+    """Heating run time so far today (classic homes with the endpoint)."""
+
+    _attr_translation_key = "heating_run_time"
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = UnitOfTime.SECONDS
+    _attr_suggested_unit_of_measurement = UnitOfTime.HOURS
+
+    def __init__(self, entry: TadoResumeConfigEntry) -> None:
+        super().__init__(entry)
+        self._attr_unique_id = f"{self._data.home_id}_heating_run_time"
+        self._attr_device_info = home_device_info(self._data.home_id)
+
+    @property
+    def native_value(self) -> int | None:
+        run = self._state.get("run_time")
+        return run["seconds"] if isinstance(run, dict) else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        run = self._state.get("run_time")
+        return {"zones": run["zones"]} if isinstance(run, dict) else {}
 
 
 class TadoLastUpdate(TadoEntity, SensorEntity):

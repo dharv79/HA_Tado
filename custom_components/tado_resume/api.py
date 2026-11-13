@@ -6,6 +6,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable
+from datetime import date
 from typing import Any
 
 import aiohttp
@@ -19,6 +20,7 @@ LOGIN_URL = "https://login.tado.com/oauth2"
 DEVICE_AUTHORIZE_URL = f"{LOGIN_URL}/device_authorize"
 TOKEN_URL = f"{LOGIN_URL}/token"
 CLASSIC_API = "https://my.tado.com/api/v2"
+MINDER_API = "https://minder.tado.com/v1"
 X_API = "https://hops.tado.com"
 
 GENERATION_X = "LINE_X"
@@ -48,6 +50,7 @@ _CLASSIC_TERMINATION = {
 
 _TOKEN_MARGIN = 30
 SCHEDULE_TTL = 3600  # seconds a fetched timetable is reused
+RUN_TIME_TTL = 900  # seconds between heating run-time reads
 OPTIONAL_BACKOFF = 1800  # seconds to leave a failing optional endpoint alone
 MAX_RETRY_AFTER = 3600
 
@@ -141,6 +144,7 @@ class TadoApi:
         self._refresh_lock = asyncio.Lock()
         self._optional_until: dict[str, float] = {}
         self._optional_last: dict[str, Any] = {}
+        self._run_times: dict[int, tuple[float, dict[str, Any] | None]] = {}
         self._schedules: dict[int, tuple[float, dict[str, Any] | None]] = {}
 
     async def _async_ensure_token(self, stale: str | None = None) -> str:
@@ -321,6 +325,36 @@ class TadoApi:
         self._optional_last[url] = data
         return data
 
+    async def _run_time(self, home_id: int) -> dict[str, Any] | None:
+        """Heating run time so far today (classic), cached for RUN_TIME_TTL seconds.
+
+        Returns {"seconds": int, "zones": {zone_id: seconds}} or None when the
+        endpoint is unavailable (it may need a tado subscription).
+        """
+        cached = self._run_times.get(home_id)
+        if cached and time.monotonic() < cached[0]:
+            return cached[1]
+        url = f"{MINDER_API}/homes/{home_id}/runningTimes?from={date.today().isoformat()}"
+        result = cached[1] if cached else None
+        try:
+            data = await self._optional(url)
+            entries = data["runningTimes"] if isinstance(data, dict) else None
+            if isinstance(entries, list):
+                zones: dict[int, int] = {}
+                total = 0
+                for entry in entries:
+                    total += int(entry.get("runningTimeInSeconds") or 0)
+                    for zone in entry.get("zones") or []:
+                        zid = zone["id"]
+                        zones[zid] = zones.get(zid, 0) + int(zone.get("runningTimeInSeconds") or 0)
+                result = {"seconds": total, "zones": zones}
+        except (TadoAuthError, TadoRateLimitError):
+            raise
+        except (KeyError, AttributeError, TypeError, ValueError):
+            pass
+        self._run_times[home_id] = (time.monotonic() + RUN_TIME_TTL, result)
+        return result
+
     async def _schedule(self, home_id: int, zone_id: int) -> dict[str, Any] | None:
         """Active timetable of a classic zone, cached for SCHEDULE_TTL seconds."""
         cached = self._schedules.get(zone_id)
@@ -347,6 +381,7 @@ class TadoApi:
         """
         classic = f"{CLASSIC_API}/homes/{home_id}"
         x_home = f"{X_API}/homes/{home_id}"
+        run_time: dict[str, Any] | None = None
         if generation == GENERATION_X:
             rooms, devices, presence, weather, mobiles = await asyncio.gather(
                 self._request("GET", f"{x_home}/rooms"),
@@ -369,6 +404,7 @@ class TadoApi:
             schedules = await asyncio.gather(
                 *(self._schedule(home_id, zone["id"]) for zone in zones or [])
             )
+            run_time = await self._run_time(home_id)
             rooms = [
                 {**zone, **(state or {}), **({"schedule": sched} if sched else {})}
                 for zone, state, sched in zip(zones or [], states, schedules, strict=False)
@@ -379,6 +415,7 @@ class TadoApi:
             "presence": presence,
             "weather": weather,
             "mobile_devices": mobiles,
+            "run_time": run_time,
         }
 
     async def async_set_manual(

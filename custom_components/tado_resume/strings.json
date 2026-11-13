@@ -80,6 +80,9 @@
       },
       "next_schedule_temperature": {
         "name": "Next scheduled temperature"
+      },
+      "heating_run_time": {
+        "name": "Heating run time today"
       }
     },
     "number": {
