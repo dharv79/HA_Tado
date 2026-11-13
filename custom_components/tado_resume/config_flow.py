@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 import voluptuous as vol
@@ -31,10 +32,10 @@ class TadoResumeConfigFlow(ConfigFlow, domain=DOMAIN):
         self._homes: list[dict[str, Any]] = []
         self._api: TadoApi | None = None
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Start the device login and show the URL to the user."""
+    async def _async_login(
+        self, step_id: str, user_input: dict[str, Any] | None
+    ) -> ConfigFlowResult | None:
+        """Run the device login; return a form/abort, or None once logged in."""
         session = async_get_clientsession(self.hass)
         errors: dict[str, str] = {}
         if user_input is None or not self._device:
@@ -56,16 +57,57 @@ class TadoResumeConfigFlow(ConfigFlow, domain=DOMAIN):
                 return self.async_abort(reason="cannot_connect")
             else:
                 self._refresh_token = tokens["refresh_token"]
-                return await self._async_pick_home()
+                return None
 
         return self.async_show_form(
-            step_id="user",
+            step_id=step_id,
             data_schema=vol.Schema({}),
             errors=errors,
             description_placeholders={
                 "url": self._device.get("verification_uri_complete", ""),
                 "code": self._device.get("user_code", ""),
             },
+        )
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Start the device login and show the URL to the user."""
+        if (result := await self._async_login("user", user_input)) is not None:
+            return result
+        return await self._async_pick_home()
+
+    async def async_step_reauth(
+        self, entry_data: Mapping[str, Any]
+    ) -> ConfigFlowResult:
+        """Start reauthentication after tado rejected the stored token."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Repeat the device login and store the new refresh token."""
+        if (result := await self._async_login("reauth_confirm", user_input)) is not None:
+            return result
+        entry = self._get_reauth_entry()
+
+        async def _rotated(token: str) -> None:
+            self._refresh_token = token
+
+        api = TadoApi(
+            async_get_clientsession(self.hass), self._refresh_token or "", _rotated
+        )
+        try:
+            homes = await api.async_get_homes()
+        except TadoAuthError:
+            self._device = {}
+            return self.async_abort(reason="auth_failed")
+        except TadoError:
+            return self.async_abort(reason="cannot_connect")
+        if str(entry.data[CONF_HOME_ID]) not in {str(h["id"]) for h in homes}:
+            return self.async_abort(reason="wrong_account")
+        return self.async_update_reload_and_abort(
+            entry, data_updates={CONF_REFRESH_TOKEN: self._refresh_token}
         )
 
     async def _async_pick_home(self) -> ConfigFlowResult:

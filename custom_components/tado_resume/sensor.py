@@ -7,7 +7,9 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, UnitOfTemperature
+from datetime import datetime
+
+from homeassistant.const import EntityCategory, PERCENTAGE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -56,6 +58,7 @@ async def async_setup_entry(
     weather = (coordinator.data or {}).get("weather")
     if isinstance(weather, dict):
         entities.extend(TadoWeather(entry, key) for key in WEATHER_SENSORS if key in weather)
+    entities.append(TadoLastUpdate(entry))
     async_add_entities(entities)
 
 
@@ -129,3 +132,25 @@ class TadoFirmware(TadoDeviceEntity, SensorEntity):
     def native_value(self) -> str | None:
         device = self._device
         return device["firmware"] if device else None
+
+
+class TadoLastUpdate(TadoEntity, SensorEntity):
+    """When tado was last read successfully."""
+
+    _attr_translation_key = "last_update"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, entry: TadoResumeConfigEntry) -> None:
+        super().__init__(entry)
+        self._attr_unique_id = f"{self._data.home_id}_last_update"
+        self._attr_device_info = home_device_info(self._data.home_id)
+
+    @property
+    def available(self) -> bool:
+        # Stay available while the API is failing: that is when it is useful.
+        return True
+
+    @property
+    def native_value(self) -> datetime | None:
+        return self.coordinator.last_success

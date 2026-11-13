@@ -120,6 +120,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: TadoResumeConfigEntry) -
 async def async_unload_entry(hass: HomeAssistant, entry: TadoResumeConfigEntry) -> bool:
     """Unload a config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded:
+        entry.runtime_data.coordinator.clear_issue()
     if unloaded and not hass.config_entries.async_loaded_entries(DOMAIN):
         for service in HOME_SERVICES:
             hass.services.async_remove(DOMAIN, service)

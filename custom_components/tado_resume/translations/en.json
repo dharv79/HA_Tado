@@ -10,6 +10,10 @@
         "data": {
           "home": "Home"
         }
+      },
+      "reauth_confirm": {
+        "title": "Log in to tado again",
+        "description": "tado rejected the saved login. Open {url} (code: {code}), approve access, then select Submit."
       }
     },
     "error": {
@@ -19,7 +23,9 @@
       "cannot_connect": "Unable to reach tado.",
       "auth_failed": "Authentication failed or expired. Start again.",
       "no_homes": "No homes found on this account.",
-      "already_configured": "This home is already configured."
+      "already_configured": "This home is already configured.",
+      "reauth_successful": "Reauthentication succeeded.",
+      "wrong_account": "This login does not have access to the configured home."
     }
   },
   "entity": {
@@ -59,6 +65,9 @@
       },
       "weather_state": {
         "name": "Weather"
+      },
+      "last_update": {
+        "name": "Last successful update"
       }
     }
   },
@@ -105,6 +114,12 @@
         "duration": "For a duration",
         "indefinite": "Until changed"
       }
+    }
+  },
+  "issues": {
+    "api_unreachable": {
+      "title": "tado is not responding",
+      "description": "Home Assistant has been unable to read from tado for over an hour. Check your internet connection and the tado status page; the integration retries automatically."
     }
   }
 }
