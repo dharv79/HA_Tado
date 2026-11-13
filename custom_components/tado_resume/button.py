@@ -57,13 +57,9 @@ class TadoResumeButton(ButtonEntity):
         """Resume the schedule."""
         data = self._data
         if self._room_id is None:
-            request = data.api.async_resume_all(
-                data.home_id, data.generation, data.room_ids
-            )
+            request = data.api.async_resume_all(data.home_id, data.generation, data.room_ids)
         else:
-            request = data.api.async_resume_room(
-                data.home_id, data.generation, self._room_id
-            )
+            request = data.api.async_resume_room(data.home_id, data.generation, self._room_id)
         await async_run(data, request, "Resume")
 
 
@@ -82,7 +78,5 @@ class TadoHomeActionButton(ButtonEntity):
     async def async_press(self) -> None:
         """Run the quick action."""
         data = self._data
-        request = getattr(data.api, self._method)(
-            data.home_id, data.generation, data.room_ids
-        )
+        request = getattr(data.api, self._method)(data.home_id, data.generation, data.room_ids)
         await async_run(data, request, "Quick action")

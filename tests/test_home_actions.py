@@ -23,12 +23,15 @@ async def _setup(hass, generation="LINE_X", weather=WEATHER):
         data={"home_id": 1, "generation": generation, "refresh_token": "r"},
     )
     entry.add_to_hass(hass)
-    with patch(
-        "custom_components.tado_resume.TadoApi.async_get_rooms",
-        AsyncMock(return_value=[{"id": 5, "name": "Hall"}]),
-    ), patch(
-        "custom_components.tado_resume.TadoApi.async_get_state",
-        AsyncMock(return_value={"rooms": {5: {"id": 5}}, "weather": weather}),
+    with (
+        patch(
+            "custom_components.tado_resume.TadoApi.async_get_rooms",
+            AsyncMock(return_value=[{"id": 5, "name": "Hall"}]),
+        ),
+        patch(
+            "custom_components.tado_resume.TadoApi.async_get_state",
+            AsyncMock(return_value={"rooms": {5: {"id": 5}}, "weather": weather}),
+        ),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
@@ -58,14 +61,17 @@ async def test_boost_button_only_on_x(hass):
 
 async def test_button_and_service(hass):
     await _setup(hass)
-    with patch(
-        "custom_components.tado_resume.TadoApi.async_boost_all", AsyncMock()
-    ) as boost, patch(
-        "custom_components.tado_resume.coordinator.TadoCoordinator.async_request_refresh",
-        AsyncMock(),
+    with (
+        patch("custom_components.tado_resume.TadoApi.async_boost_all", AsyncMock()) as boost,
+        patch(
+            "custom_components.tado_resume.coordinator.TadoCoordinator.async_request_refresh",
+            AsyncMock(),
+        ),
     ):
         await hass.services.async_call(
-            "button", "press", {"entity_id": "button.tado_home_boost_all_rooms"},
+            "button",
+            "press",
+            {"entity_id": "button.tado_home_boost_all_rooms"},
             blocking=True,
         )
         await hass.services.async_call(DOMAIN, "boost_all_rooms", blocking=True)

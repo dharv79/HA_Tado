@@ -4,19 +4,19 @@ from __future__ import annotations
 
 from typing import Any
 
+import voluptuous as vol
 from homeassistant.components.climate import (
+    PRESET_BOOST,
     ClimateEntity,
     ClimateEntityFeature,
     HVACAction,
     HVACMode,
-    PRESET_BOOST,
 )
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-import voluptuous as vol
 
 from . import TadoResumeConfigEntry
 from .api import (
@@ -52,9 +52,7 @@ async def async_setup_entry(
         SERVICE_SET_ROOM_TEMPERATURE,
         {
             vol.Required(ATTR_TEMPERATURE): vol.Coerce(float),
-            vol.Optional("termination", default=TERMINATION_NEXT_BLOCK): vol.In(
-                TERMINATIONS
-            ),
+            vol.Optional("termination", default=TERMINATION_NEXT_BLOCK): vol.In(TERMINATIONS),
             vol.Optional("duration"): vol.All(vol.Coerce(int), vol.Range(min=1)),
         },
         "async_set_room_temperature",
@@ -71,9 +69,7 @@ class TadoClimate(TadoRoomEntity, ClimateEntity):
     _attr_target_temperature_step = 0.5
     _attr_hvac_modes = [HVACMode.AUTO, HVACMode.HEAT, HVACMode.OFF]
 
-    def __init__(
-        self, entry: TadoResumeConfigEntry, room_id: int, room_name: str
-    ) -> None:
+    def __init__(self, entry: TadoResumeConfigEntry, room_id: int, room_name: str) -> None:
         super().__init__(entry, room_id, room_name, "climate")
         data = self._data
         features = (

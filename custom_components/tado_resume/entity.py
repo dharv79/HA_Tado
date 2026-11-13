@@ -121,9 +121,7 @@ class TadoDeviceEntity(TadoEntity):
         self._serial = serial
         home_id = self._data.home_id
         self._attr_unique_id = f"{home_id}_{serial}_{key}"
-        device = self._device or {
-            "serial": serial, "type": None, "room_id": None, "firmware": None
-        }
+        device = self._device or {"serial": serial, "type": None, "room_id": None, "firmware": None}
         self._attr_device_info = physical_device_info(home_id, device)
 
     @property

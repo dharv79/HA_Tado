@@ -38,7 +38,7 @@ class TadoTracker(TadoEntity, BaseTrackerEntity):
         self._device_id = device_id
         key = f"{self._data.home_id}_mobile_{device_id}"
         self._attr_unique_id = key
-        self._attr_device_info = DeviceInfo(
+        self._attr_device_info = DeviceInfo(  # type: ignore[assignment]
             identifiers={(DOMAIN, key)},
             name=name or f"Mobile device {device_id}",
             manufacturer=MANUFACTURER,

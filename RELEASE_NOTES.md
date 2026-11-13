@@ -1,4 +1,7 @@
-Release 0.10.0: reauth flow, API-unreachable repair issue and last-successful-update sensor.
+## 0.19.0
 
-- Expired or revoked tokens now start a reauth prompt instead of requiring the entry to be removed.
-- A repair issue appears after an hour of API failures.
+Quality tooling only; no behaviour changes.
+
+- Added ruff (lint and format) and mypy configuration.
+- CI now runs lint, type checks, tests with a coverage floor, hassfest and HACS validation.
+- Minor typing and style fixes across the code and tests.

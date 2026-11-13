@@ -48,8 +48,7 @@ def parse_devices(raw: Any) -> list[dict[str, Any]]:
                 "room_id": room_id,
                 "battery_low": None if battery is None else battery != "NORMAL",
                 "connected": _connected(device),
-                "firmware": device.get("firmwareVersion")
-                or device.get("currentFwVersion"),
+                "firmware": device.get("firmwareVersion") or device.get("currentFwVersion"),
             }
         )
     return result

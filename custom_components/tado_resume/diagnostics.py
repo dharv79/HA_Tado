@@ -36,8 +36,6 @@ async def async_get_config_entry_diagnostics(
     return {
         "entry": async_redact_data(dict(entry.data), TO_REDACT),
         "generation": entry.runtime_data.generation,
-        "capabilities": {
-            str(rid): sorted(caps) for rid, caps in coordinator.capabilities.items()
-        },
+        "capabilities": {str(rid): sorted(caps) for rid, caps in coordinator.capabilities.items()},
         "state": async_redact_data(coordinator.data or {}, TO_REDACT),
     }

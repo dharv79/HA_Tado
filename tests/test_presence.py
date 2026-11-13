@@ -9,10 +9,16 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.tado_resume.api import TadoApi
 from custom_components.tado_resume.const import DOMAIN
 
+HOPS_PRESENCE = "https://hops.tado.com/homes/1/presence"
+CLASSIC_LOCK = "https://my.tado.com/api/v2/homes/1/presenceLock"
 ROOM = {"id": 5, "name": "Hall", "openWindow": {"expiryInSeconds": 100}}
 MOBILE = [
-    {"id": 1, "name": "Phone", "settings": {"geoTrackingEnabled": True},
-     "location": {"atHome": True}},
+    {
+        "id": 1,
+        "name": "Phone",
+        "settings": {"geoTrackingEnabled": True},
+        "location": {"atHome": True},
+    },
     {"id": 2, "name": "Tablet", "settings": {"geoTrackingEnabled": False}},
 ]
 
@@ -24,12 +30,15 @@ async def _setup(hass, state, generation="LINE_X"):
         data={"home_id": 1, "generation": generation, "refresh_token": "r"},
     )
     entry.add_to_hass(hass)
-    with patch(
-        "custom_components.tado_resume.TadoApi.async_get_rooms",
-        AsyncMock(return_value=[{"id": 5, "name": "Hall"}]),
-    ), patch(
-        "custom_components.tado_resume.TadoApi.async_get_state",
-        AsyncMock(return_value={"rooms": {5: ROOM}, **state}),
+    with (
+        patch(
+            "custom_components.tado_resume.TadoApi.async_get_rooms",
+            AsyncMock(return_value=[{"id": 5, "name": "Hall"}]),
+        ),
+        patch(
+            "custom_components.tado_resume.TadoApi.async_get_state",
+            AsyncMock(return_value={"rooms": {5: ROOM}, **state}),
+        ),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
@@ -63,11 +72,12 @@ async def test_nothing_without_data(hass):
 async def test_select_presence(hass):
     await _setup(hass, {"presence": {"presence": "AWAY", "presenceLocked": True}})
     assert hass.states.get("select.tado_home_presence").state == "away"
-    with patch(
-        "custom_components.tado_resume.TadoApi.async_set_presence", AsyncMock()
-    ) as call, patch(
-        "custom_components.tado_resume.coordinator.TadoCoordinator.async_request_refresh",
-        AsyncMock(),
+    with (
+        patch("custom_components.tado_resume.TadoApi.async_set_presence", AsyncMock()) as call,
+        patch(
+            "custom_components.tado_resume.coordinator.TadoCoordinator.async_request_refresh",
+            AsyncMock(),
+        ),
     ):
         await hass.services.async_call(
             "select",
@@ -81,10 +91,22 @@ async def test_select_presence(hass):
 @pytest.mark.parametrize(
     ("generation", "presence", "expected"),
     [
-        ("LINE_X", "auto", ("PUT", "https://hops.tado.com/homes/1/presence", {"homePresence": "AUTO"})),
-        ("LINE_X", "away", ("PUT", "https://hops.tado.com/homes/1/presence", {"homePresence": "AWAY"})),
-        ("PRE_LINE_X", "home", ("PUT", "https://my.tado.com/api/v2/homes/1/presenceLock", {"homePresence": "HOME"})),
-        ("PRE_LINE_X", "auto", ("DELETE", "https://my.tado.com/api/v2/homes/1/presenceLock")),
+        (
+            "LINE_X",
+            "auto",
+            ("PUT", HOPS_PRESENCE, {"homePresence": "AUTO"}),
+        ),
+        (
+            "LINE_X",
+            "away",
+            ("PUT", HOPS_PRESENCE, {"homePresence": "AWAY"}),
+        ),
+        (
+            "PRE_LINE_X",
+            "home",
+            ("PUT", CLASSIC_LOCK, {"homePresence": "HOME"}),
+        ),
+        ("PRE_LINE_X", "auto", ("DELETE", CLASSIC_LOCK)),
     ],
 )
 async def test_presence_requests(generation, presence, expected):
@@ -102,15 +124,16 @@ async def test_legacy_open_window_buttons_removed(hass):
     )
     entry.add_to_hass(hass)
     registry = er.async_get(hass)
-    registry.async_get_or_create(
-        "button", DOMAIN, "1_5_open_window_activate", config_entry=entry
-    )
-    with patch(
-        "custom_components.tado_resume.TadoApi.async_get_rooms",
-        AsyncMock(return_value=[{"id": 5, "name": "Hall"}]),
-    ), patch(
-        "custom_components.tado_resume.TadoApi.async_get_state",
-        AsyncMock(return_value={"rooms": {5: ROOM}}),
+    registry.async_get_or_create("button", DOMAIN, "1_5_open_window_activate", config_entry=entry)
+    with (
+        patch(
+            "custom_components.tado_resume.TadoApi.async_get_rooms",
+            AsyncMock(return_value=[{"id": 5, "name": "Hall"}]),
+        ),
+        patch(
+            "custom_components.tado_resume.TadoApi.async_get_state",
+            AsyncMock(return_value={"rooms": {5: ROOM}}),
+        ),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()

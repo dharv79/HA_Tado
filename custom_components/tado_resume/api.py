@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import aiohttp
@@ -86,9 +86,7 @@ async def async_poll_device_flow(
     )
 
 
-async def _token_request(
-    session: aiohttp.ClientSession, data: dict[str, str]
-) -> dict[str, Any]:
+async def _token_request(session: aiohttp.ClientSession, data: dict[str, str]) -> dict[str, Any]:
     async with session.post(TOKEN_URL, data=data) as resp:
         try:
             body = await resp.json()
@@ -145,9 +143,7 @@ class TadoApi:
             },
         )
         self._access_token = tokens["access_token"]
-        self._expires_at = (
-            time.monotonic() + int(tokens.get("expires_in", 600)) - _TOKEN_MARGIN
-        )
+        self._expires_at = time.monotonic() + int(tokens.get("expires_in", 600)) - _TOKEN_MARGIN
         new_refresh = tokens.get("refresh_token")
         if new_refresh and new_refresh != self._refresh_token:
             self._refresh_token = new_refresh
@@ -155,9 +151,7 @@ class TadoApi:
                 await self._token_updated(new_refresh)
         return self._access_token
 
-    async def _request(
-        self, method: str, url: str, json: dict[str, Any] | None = None
-    ) -> Any:
+    async def _request(self, method: str, url: str, json: dict[str, Any] | None = None) -> Any:
         token: str | None = None
         for attempt in (0, 1):
             token = await self._async_ensure_token(stale=token if attempt else None)
@@ -165,9 +159,7 @@ class TadoApi:
             if method in ("POST", "PUT", "PATCH"):
                 # tado X rejects body-less writes without a JSON content type.
                 headers["Content-Type"] = "application/json"
-            async with self._session.request(
-                method, url, headers=headers, json=json
-            ) as resp:
+            async with self._session.request(method, url, headers=headers, json=json) as resp:
                 if resp.status == 401 and attempt == 0:
                     continue
                 if resp.status == 401:
@@ -182,9 +174,7 @@ class TadoApi:
                     )
                 if resp.status >= 400:
                     detail = (await resp.text())[:300]
-                    raise TadoError(
-                        f"{method} {url} failed ({resp.status}): {detail}"
-                    )
+                    raise TadoError(f"{method} {url} failed ({resp.status}): {detail}")
                 if resp.status == 204 or resp.content_length == 0:
                     return None
                 try:
@@ -202,9 +192,7 @@ class TadoApi:
         home = await self._request("GET", f"{CLASSIC_API}/homes/{home_id}")
         return home.get("generation", GENERATION_CLASSIC)
 
-    async def async_get_rooms(
-        self, home_id: int, generation: str
-    ) -> list[dict[str, Any]]:
+    async def async_get_rooms(self, home_id: int, generation: str) -> list[dict[str, Any]]:
         """Return rooms (tado X) or zones (classic) as [{id, name}]."""
         if generation == GENERATION_X:
             data = await self._request("GET", f"{X_API}/homes/{home_id}/rooms")
@@ -212,54 +200,36 @@ class TadoApi:
             data = await self._request("GET", f"{CLASSIC_API}/homes/{home_id}/zones")
         return [{"id": item["id"], "name": item["name"]} for item in data or []]
 
-    async def async_resume_room(
-        self, home_id: int, generation: str, room_id: int
-    ) -> None:
+    async def async_resume_room(self, home_id: int, generation: str, room_id: int) -> None:
         """Remove any manual override and resume the room's schedule."""
         if generation == GENERATION_X:
-            await self._request(
-                "POST", f"{X_API}/homes/{home_id}/rooms/{room_id}/resumeSchedule"
-            )
+            await self._request("POST", f"{X_API}/homes/{home_id}/rooms/{room_id}/resumeSchedule")
         else:
-            await self._request(
-                "DELETE", f"{CLASSIC_API}/homes/{home_id}/zones/{room_id}/overlay"
-            )
+            await self._request("DELETE", f"{CLASSIC_API}/homes/{home_id}/zones/{room_id}/overlay")
 
-    async def async_resume_all(
-        self, home_id: int, generation: str, room_ids: list[int]
-    ) -> None:
+    async def async_resume_all(self, home_id: int, generation: str, room_ids: list[int]) -> None:
         """Resume the schedule in every room of the home."""
         if generation == GENERATION_X:
-            await self._request(
-                "POST", f"{X_API}/homes/{home_id}/quickActions/resumeSchedule"
-            )
+            await self._request("POST", f"{X_API}/homes/{home_id}/quickActions/resumeSchedule")
             return
         for room_id in room_ids:
             await self.async_resume_room(home_id, generation, room_id)
 
-    async def async_boost_all(
-        self, home_id: int, generation: str, room_ids: list[int]
-    ) -> None:
+    async def async_boost_all(self, home_id: int, generation: str, room_ids: list[int]) -> None:
         """Boost every room (tado X only)."""
         if generation != GENERATION_X:
             raise TadoError("Boost is only supported on tado X")
         await self._request("POST", f"{X_API}/homes/{home_id}/quickActions/boost")
 
-    async def async_turn_off_all(
-        self, home_id: int, generation: str, room_ids: list[int]
-    ) -> None:
+    async def async_turn_off_all(self, home_id: int, generation: str, room_ids: list[int]) -> None:
         """Switch heating off in every room until the next schedule block."""
         if generation == GENERATION_X:
-            await self._request(
-                "POST", f"{X_API}/homes/{home_id}/quickActions/turnOffAll"
-            )
+            await self._request("POST", f"{X_API}/homes/{home_id}/quickActions/turnOffAll")
             return
         for room_id in room_ids:
             await self.async_set_manual(home_id, generation, room_id, None)
 
-    async def async_set_presence(
-        self, home_id: int, generation: str, presence: str
-    ) -> None:
+    async def async_set_presence(self, home_id: int, generation: str, presence: str) -> None:
         """Set home presence: "home", "away" or "auto" (geofencing)."""
         if presence not in PRESENCE_OPTIONS:
             raise TadoError(f"Unknown presence: {presence}")
@@ -270,9 +240,7 @@ class TadoApi:
                 {"homePresence": presence.upper()},
             )
         elif presence == PRESENCE_AUTO:
-            await self._request(
-                "DELETE", f"{CLASSIC_API}/homes/{home_id}/presenceLock"
-            )
+            await self._request("DELETE", f"{CLASSIC_API}/homes/{home_id}/presenceLock")
         else:
             await self._request(
                 "PUT",
@@ -289,9 +257,7 @@ class TadoApi:
         except TadoError:
             return None
 
-    async def async_get_state(
-        self, home_id: int, generation: str
-    ) -> dict[str, Any]:
+    async def async_get_state(self, home_id: int, generation: str) -> dict[str, Any]:
         """Return a snapshot of the home: rooms, devices, presence, weather.
 
         Rooms are required; the other sections are optional and are None when
@@ -316,13 +282,10 @@ class TadoApi:
                 self._optional(f"{classic}/mobileDevices"),
             )
             states = await asyncio.gather(
-                *(
-                    self._optional(f"{classic}/zones/{zone['id']}/state")
-                    for zone in zones or []
-                )
+                *(self._optional(f"{classic}/zones/{zone['id']}/state") for zone in zones or [])
             )
             rooms = [
-                {**zone, **(state or {})} for zone, state in zip(zones or [], states)
+                {**zone, **(state or {})} for zone, state in zip(zones or [], states, strict=False)
             ]
         return {
             "rooms": {room["id"]: room for room in rooms or []},
@@ -387,9 +350,7 @@ class TadoApi:
             {"setting": setting, "termination": term},
         )
 
-    async def async_boost_room(
-        self, home_id: int, generation: str, room_id: int
-    ) -> None:
+    async def async_boost_room(self, home_id: int, generation: str, room_id: int) -> None:
         """Boost a room for 30 minutes (tado X only)."""
         await self.async_set_manual(
             home_id,
