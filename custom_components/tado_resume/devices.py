@@ -16,8 +16,20 @@ def _connected(device: dict[str, Any]) -> bool | None:
     return None
 
 
+def _offset(device: dict[str, Any]) -> float | None:
+    value = device.get("temperatureOffset")
+    if isinstance(value, dict):
+        value = value.get("celsius")
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def _child_lock(device: dict[str, Any]) -> bool | None:
+    value = device.get("childLockEnabled")
+    return value if isinstance(value, bool) else None
+
+
 def parse_devices(raw: Any) -> list[dict[str, Any]]:
-    """Return [{serial, type, room_id, battery_low, connected, firmware}].
+    """Return [{serial, type, room_id, battery_low, connected, firmware, ...}].
 
     Missing fields are None so that entities are only created where data exists.
     """
@@ -49,6 +61,8 @@ def parse_devices(raw: Any) -> list[dict[str, Any]]:
                 "battery_low": None if battery is None else battery != "NORMAL",
                 "connected": _connected(device),
                 "firmware": device.get("firmwareVersion") or device.get("currentFwVersion"),
+                "temperature_offset": _offset(device),
+                "child_lock": _child_lock(device),
             }
         )
     return result

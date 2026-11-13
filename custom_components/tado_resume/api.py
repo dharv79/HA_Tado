@@ -276,6 +276,30 @@ class TadoApi:
                 {"homePresence": presence.upper()},
             )
 
+    async def async_set_temperature_offset(
+        self, home_id: int, generation: str, serial: str, offset: float
+    ) -> None:
+        """Set a device's temperature offset in °C (tado X only)."""
+        if generation != GENERATION_X:
+            raise TadoError("Temperature offset is only supported on tado X")
+        await self._request(
+            "PATCH",
+            f"{X_API}/homes/{home_id}/roomsAndDevices/devices/{serial}",
+            {"temperatureOffset": offset},
+        )
+
+    async def async_set_child_lock(
+        self, home_id: int, generation: str, serial: str, enabled: bool
+    ) -> None:
+        """Enable or disable a device's child lock."""
+        body = {"childLockEnabled": enabled}
+        if generation == GENERATION_X:
+            await self._request(
+                "PATCH", f"{X_API}/homes/{home_id}/roomsAndDevices/devices/{serial}", body
+            )
+        else:
+            await self._request("PUT", f"{CLASSIC_API}/devices/{serial}/childLock", body)
+
     async def _optional(self, url: str) -> Any:
         """GET an endpoint that may be unavailable for some homes.
 
