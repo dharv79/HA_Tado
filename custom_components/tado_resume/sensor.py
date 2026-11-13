@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -15,7 +16,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from . import TadoResumeConfigEntry
-from .capabilities import CAP_HEATING_POWER, CAP_HUMIDITY, CAP_OVERRIDE
+from .capabilities import CAP_HEATING_POWER, CAP_HUMIDITY, CAP_OVERRIDE, CAP_SCHEDULE
 from .entity import (
     TadoDeviceEntity,
     TadoEntity,
@@ -25,6 +26,7 @@ from .entity import (
     number,
     override_termination,
 )
+from .schedule import next_change
 
 # Weather payload key -> (translation key, payload field, unit, device class)
 WEATHER_SENSORS = {
@@ -57,6 +59,9 @@ async def async_setup_entry(
         if CAP_OVERRIDE in room_caps:
             entities.append(TadoOverrideEnds(entry, room["id"], room["name"]))
             entities.append(TadoOverrideRemaining(entry, room["id"], room["name"]))
+        if CAP_SCHEDULE in room_caps:
+            entities.append(TadoNextChange(entry, room["id"], room["name"]))
+            entities.append(TadoNextTemperature(entry, room["id"], room["name"]))
     for serial, device in coordinator.devices.items():
         if device["firmware"]:
             entities.append(TadoFirmware(entry, serial))
@@ -171,6 +176,50 @@ class TadoOverrideRemaining(TadoRoomEntity, SensorEntity):
     def native_value(self) -> int | None:
         info = override_termination(self._room)
         return info["remaining"] if info else None
+
+
+class _ScheduleSensor(TadoRoomEntity, SensorEntity):
+    """Base for sensors derived from the room's active timetable."""
+
+    @property
+    def _next(self) -> dict[str, Any] | None:
+        return next_change(self._room.get("schedule"), dt_util.now())
+
+
+class TadoNextChange(_ScheduleSensor):
+    """When the schedule next changes the room's setting."""
+
+    _attr_translation_key = "next_schedule_change"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def __init__(self, entry, room_id, room_name):
+        super().__init__(entry, room_id, room_name, "next_schedule_change")
+
+    @property
+    def native_value(self) -> datetime | None:
+        nxt = self._next
+        return dt_util.as_utc(nxt["at"]) if nxt else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        nxt = self._next
+        return {"power": nxt["power"] if nxt else None}
+
+
+class TadoNextTemperature(_ScheduleSensor):
+    """Target temperature of the next scheduled change (unknown when heating is off)."""
+
+    _attr_translation_key = "next_schedule_temperature"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+
+    def __init__(self, entry, room_id, room_name):
+        super().__init__(entry, room_id, room_name, "next_schedule_temperature")
+
+    @property
+    def native_value(self) -> float | None:
+        nxt = self._next
+        return nxt["temperature"] if nxt else None
 
 
 class TadoFirmware(TadoDeviceEntity, SensorEntity):

@@ -14,6 +14,7 @@ CAP_TARGET = "target_temperature"
 CAP_HEATING_POWER = "heating_power"
 CAP_OPEN_WINDOW = "open_window"
 CAP_OVERRIDE = "override"
+CAP_SCHEDULE = "schedule"
 
 
 def room_capabilities(room: dict[str, Any]) -> frozenset[str]:
@@ -37,6 +38,8 @@ def room_capabilities(room: dict[str, Any]) -> frozenset[str]:
         caps.add(CAP_OPEN_WINDOW)
     if "manualControlTermination" in room or "overlay" in room:
         caps.add(CAP_OVERRIDE)
+    if room.get("schedule"):
+        caps.add(CAP_SCHEDULE)
     return frozenset(caps)
 
 
