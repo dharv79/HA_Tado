@@ -1,0 +1,67 @@
+blueprint:
+  name: tado window open, heating off
+  description: >
+    Turns a tado room off when its window has been open for a set time, and
+    returns it to its schedule when the window is closed again.
+  domain: automation
+  source_url: https://github.com/dharv79/HA_Tado/blob/main/blueprints/automation/tado_resume/window_open_heating_off.yaml
+  input:
+    window:
+      name: Window sensor
+      description: Any window or door sensor, or the tado Open window sensor.
+      selector:
+        entity:
+          domain: binary_sensor
+    room:
+      name: Room thermostat
+      selector:
+        entity:
+          integration: tado_resume
+          domain: climate
+    resume:
+      name: Resume schedule button
+      description: The room's Resume schedule button.
+      selector:
+        entity:
+          integration: tado_resume
+          domain: button
+    delay:
+      name: Open for at least
+      default: 120
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: s
+
+mode: restart
+
+triggers:
+  - trigger: state
+    entity_id: !input window
+    to: "on"
+    for:
+      seconds: !input delay
+    id: opened
+  - trigger: state
+    entity_id: !input window
+    from: "on"
+    to: "off"
+    id: closed
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: opened
+        sequence:
+          - action: climate.turn_off
+            target:
+              entity_id: !input room
+      - conditions:
+          - condition: trigger
+            id: closed
+        sequence:
+          - action: tado_resume.resume_schedule
+            target:
+              entity_id: !input resume

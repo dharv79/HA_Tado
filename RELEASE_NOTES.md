@@ -1,5 +1,4 @@
-## 0.18.0
+## 0.19.0
 
-- New service `tado_resume.set_away_until`: sets every home to away now and returns it to automatic (geofencing) at the chosen date and time.
-- The end time is stored, so it survives a Home Assistant restart. If the time passes while Home Assistant is stopped, presence returns to automatic at the next start. A failed return is retried every 5 minutes.
-- Choosing a presence manually (the Presence select) cancels the timer.
+- Three automation blueprints: window open turns a room off and resumes it on close; everyone away sets away mode; arrival sets presence to automatic and resumes all schedules.
+- Import buttons are in the README.
