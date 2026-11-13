@@ -39,3 +39,5 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # Repository settings and brand icon; re-enable once set (see docs/plan/phase-17-quality.md)
+          ignore: brands topics description
