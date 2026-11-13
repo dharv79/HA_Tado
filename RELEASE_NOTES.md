@@ -1,8 +1,5 @@
-## 0.13.0
+## 0.14.0
 
-Device settings.
-
-- New temperature offset control (number, configuration category) for each tado X device that reports an offset.
-- New child lock switch (configuration category) for each device that reports a child lock, on tado X and classic.
-- Entities are only created where tado reports the value; devices without it get nothing.
-- Display and LED controls are not included: no write endpoint has been identified.
+- New per-room sensors showing when a manual override ends and how much time remains, with the override type as an attribute.
+- Works for tado X and classic; manual overrides (no end) report unknown.
+- Field names are taken from tado's documented payloads and have not yet been confirmed against hardware.

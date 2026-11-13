@@ -68,6 +68,12 @@
       },
       "last_update": {
         "name": "Last successful update"
+      },
+      "override_ends": {
+        "name": "Override ends"
+      },
+      "override_remaining": {
+        "name": "Override time remaining"
       }
     },
     "number": {

@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from . import TadoResumeConfigEntry
-from .capabilities import CAP_HEATING_POWER, CAP_HUMIDITY
+from .capabilities import CAP_HEATING_POWER, CAP_HUMIDITY, CAP_OVERRIDE
 from .entity import (
     TadoDeviceEntity,
     TadoEntity,
@@ -22,6 +23,7 @@ from .entity import (
     heating_power,
     home_device_info,
     number,
+    override_termination,
 )
 
 # Weather payload key -> (translation key, payload field, unit, device class)
@@ -52,6 +54,9 @@ async def async_setup_entry(
             entities.append(TadoHeatingPower(entry, room["id"], room["name"]))
         if CAP_HUMIDITY in room_caps:
             entities.append(TadoHumidity(entry, room["id"], room["name"]))
+        if CAP_OVERRIDE in room_caps:
+            entities.append(TadoOverrideEnds(entry, room["id"], room["name"]))
+            entities.append(TadoOverrideRemaining(entry, room["id"], room["name"]))
     for serial, device in coordinator.devices.items():
         if device["firmware"]:
             entities.append(TadoFirmware(entry, serial))
@@ -118,6 +123,54 @@ class TadoHumidity(TadoRoomEntity, SensorEntity):
     def native_value(self) -> float | None:
         humidity = (self._room.get("sensorDataPoints") or {}).get("humidity") or {}
         return number(humidity.get("percentage"))
+
+
+class TadoOverrideEnds(TadoRoomEntity, SensorEntity):
+    """When the current manual override ends (unknown for manual or none)."""
+
+    _attr_translation_key = "override_ends"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def __init__(self, entry, room_id, room_name):
+        super().__init__(entry, room_id, room_name, "override_ends")
+
+    @property
+    def native_value(self) -> datetime | None:
+        info = override_termination(self._room)
+        if not info:
+            return None
+        if info["expiry"]:
+            parsed = dt_util.parse_datetime(info["expiry"])
+            if parsed is not None:
+                return (
+                    dt_util.as_utc(parsed) if parsed.tzinfo else parsed.replace(tzinfo=dt_util.UTC)
+                )
+        base = self.coordinator.last_success
+        if info["remaining"] is not None and base is not None:
+            return base + timedelta(seconds=info["remaining"])
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str | None]:
+        info = override_termination(self._room)
+        return {"termination": info["type"] if info else None}
+
+
+class TadoOverrideRemaining(TadoRoomEntity, SensorEntity):
+    """Seconds left of the current manual override."""
+
+    _attr_translation_key = "override_remaining"
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.SECONDS
+    _attr_suggested_unit_of_measurement = UnitOfTime.MINUTES
+
+    def __init__(self, entry, room_id, room_name):
+        super().__init__(entry, room_id, room_name, "override_remaining")
+
+    @property
+    def native_value(self) -> int | None:
+        info = override_termination(self._room)
+        return info["remaining"] if info else None
 
 
 class TadoFirmware(TadoDeviceEntity, SensorEntity):
