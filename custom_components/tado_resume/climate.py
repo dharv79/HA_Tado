@@ -26,7 +26,15 @@ from .api import (
     TERMINATIONS,
 )
 from .capabilities import CAP_TARGET
-from .const import SERVICE_SET_ROOM_TEMPERATURE
+from .const import (
+    CONF_BOOST_MINUTES,
+    CONF_BOOST_TEMPERATURE,
+    CONF_DEFAULT_TERMINATION,
+    DEFAULT_BOOST_MINUTES,
+    DEFAULT_BOOST_TEMPERATURE,
+    DEFAULT_TERMINATION,
+    SERVICE_SET_ROOM_TEMPERATURE,
+)
 from .entity import TadoRoomEntity, async_run, heating_power, number
 
 PRESET_SCHEDULE = "schedule"
@@ -139,6 +147,10 @@ class TadoClimate(TadoRoomEntity, ClimateEntity):
             )
         )
 
+    @property
+    def _default_termination(self) -> str:
+        return self._options.get(CONF_DEFAULT_TERMINATION, DEFAULT_TERMINATION)
+
     async def _manual(
         self,
         temperature: float | None,
@@ -161,7 +173,7 @@ class TadoClimate(TadoRoomEntity, ClimateEntity):
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set a target temperature until the next schedule block."""
         if (temperature := kwargs.get(ATTR_TEMPERATURE)) is not None:
-            await self._manual(float(temperature))
+            await self._manual(float(temperature), self._default_termination)
 
     async def async_set_room_temperature(
         self,
@@ -182,14 +194,19 @@ class TadoClimate(TadoRoomEntity, ClimateEntity):
         elif hvac_mode == HVACMode.OFF:
             await self._manual(None, TERMINATION_NEXT_BLOCK)
         else:
-            await self._manual(self.target_temperature or DEFAULT_TEMP)
+            await self._manual(self.target_temperature or DEFAULT_TEMP, self._default_termination)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Boost the room for 30 minutes, or resume the schedule."""
         if preset_mode == PRESET_BOOST:
+            options = self._options
             await self._call(
                 self._data.api.async_boost_room(
-                    self._data.home_id, self._data.generation, self._room_id
+                    self._data.home_id,
+                    self._data.generation,
+                    self._room_id,
+                    options.get(CONF_BOOST_TEMPERATURE, DEFAULT_BOOST_TEMPERATURE),
+                    int(options.get(CONF_BOOST_MINUTES, DEFAULT_BOOST_MINUTES)) * 60,
                 )
             )
         else:

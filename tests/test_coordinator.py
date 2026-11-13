@@ -1,6 +1,7 @@
 """Coordinator, capability and diagnostics tests (fixtures are illustrative)."""
 
 import json
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -11,8 +12,8 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.tado_resume.api import TadoAuthError, TadoError
 from custom_components.tado_resume.capabilities import room_capabilities
-from custom_components.tado_resume.const import DOMAIN
-from custom_components.tado_resume.coordinator import BASE_INTERVAL, MAX_INTERVAL
+from custom_components.tado_resume.const import DEFAULT_POLL_INTERVAL, DOMAIN
+from custom_components.tado_resume.coordinator import MAX_INTERVAL
 from custom_components.tado_resume.diagnostics import async_get_config_entry_diagnostics
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures" / "state_x.json").read_text())
@@ -63,7 +64,7 @@ async def test_backoff_and_reset(hass: HomeAssistant) -> None:
     assert coordinator.update_interval == MAX_INTERVAL
     with patch.object(coordinator.api, "async_get_state", AsyncMock(return_value=STATE)):
         await coordinator.async_refresh()
-    assert coordinator.update_interval == BASE_INTERVAL
+    assert coordinator.update_interval == timedelta(seconds=DEFAULT_POLL_INTERVAL)
 
 
 async def test_auth_error_raises_auth_failed(hass: HomeAssistant) -> None:

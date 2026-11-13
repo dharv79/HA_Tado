@@ -14,12 +14,11 @@ from homeassistant.util import dt as dt_util
 
 from .api import TadoApi, TadoAuthError, TadoError
 from .capabilities import capability_map
-from .const import DOMAIN
+from .const import CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL, DOMAIN
 from .devices import parse_devices, tracked_mobiles
 
 _LOGGER = logging.getLogger(__name__)
 
-BASE_INTERVAL = timedelta(seconds=60)
 MAX_INTERVAL = timedelta(minutes=15)
 FAILURE_REPAIR_AFTER = timedelta(hours=1)
 ISSUE_API_UNREACHABLE = "api_unreachable"
@@ -31,13 +30,15 @@ class TadoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(
         self, hass: HomeAssistant, entry: Any, api: TadoApi, home_id: int, generation: str
     ) -> None:
+        interval = entry.options.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL)
         super().__init__(
             hass,
             _LOGGER,
             config_entry=entry,
             name=f"{DOMAIN}_{home_id}",
-            update_interval=BASE_INTERVAL,
+            update_interval=timedelta(seconds=interval),
         )
+        self.base_interval = timedelta(seconds=interval)
         self.api = api
         self.home_id = home_id
         self.generation = generation
@@ -53,10 +54,13 @@ class TadoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except TadoAuthError as err:
             raise ConfigEntryAuthFailed from err
         except TadoError as err:
-            self.update_interval = min((self.update_interval or BASE_INTERVAL) * 2, MAX_INTERVAL)
+            self.update_interval = min(
+                (self.update_interval or self.base_interval) * 2,
+                max(MAX_INTERVAL, self.base_interval),
+            )
             self._note_failure()
             raise UpdateFailed(str(err)) from err
-        self.update_interval = BASE_INTERVAL
+        self.update_interval = self.base_interval
         self.last_success = dt_util.utcnow()
         self._failing_since = None
         self.clear_issue()

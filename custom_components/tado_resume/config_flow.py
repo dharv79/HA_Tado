@@ -6,7 +6,9 @@ from collections.abc import Mapping
 from typing import Any
 
 import voluptuous as vol
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.core import callback
+from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import (
@@ -17,13 +19,32 @@ from .api import (
     async_poll_device_flow,
     async_start_device_flow,
 )
-from .const import CONF_GENERATION, CONF_HOME_ID, CONF_REFRESH_TOKEN, DOMAIN
+from .const import (
+    CONF_BOOST_MINUTES,
+    CONF_BOOST_TEMPERATURE,
+    CONF_DEFAULT_TERMINATION,
+    CONF_GENERATION,
+    CONF_HOME_ID,
+    CONF_POLL_INTERVAL,
+    CONF_REFRESH_TOKEN,
+    DEFAULT_BOOST_MINUTES,
+    DEFAULT_BOOST_TEMPERATURE,
+    DEFAULT_POLL_INTERVAL,
+    DEFAULT_TERMINATION,
+    DOMAIN,
+)
 
 
 class TadoResumeConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Return the options flow."""
+        return TadoResumeOptionsFlow()
 
     def __init__(self) -> None:
         self._device: dict[str, Any] = {}
@@ -148,3 +169,64 @@ class TadoResumeConfigFlow(ConfigFlow, domain=DOMAIN):
                 CONF_REFRESH_TOKEN: self._refresh_token,
             },
         )
+
+
+class TadoResumeOptionsFlow(OptionsFlow):
+    """Polling, boost and default override settings."""
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Show and store the options."""
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+        current = self.config_entry.options
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_POLL_INTERVAL,
+                    default=current.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL),
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=30,
+                        max=3600,
+                        step=10,
+                        unit_of_measurement="s",
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                ),
+                vol.Required(
+                    CONF_BOOST_TEMPERATURE,
+                    default=current.get(CONF_BOOST_TEMPERATURE, DEFAULT_BOOST_TEMPERATURE),
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=5,
+                        max=25,
+                        step=0.5,
+                        unit_of_measurement="°C",
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                ),
+                vol.Required(
+                    CONF_BOOST_MINUTES,
+                    default=current.get(CONF_BOOST_MINUTES, DEFAULT_BOOST_MINUTES),
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=5,
+                        max=720,
+                        step=5,
+                        unit_of_measurement="min",
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                ),
+                vol.Required(
+                    CONF_DEFAULT_TERMINATION,
+                    default=current.get(CONF_DEFAULT_TERMINATION, DEFAULT_TERMINATION),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=["next_schedule_block", "indefinite"],
+                        translation_key="default_termination",
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=schema)

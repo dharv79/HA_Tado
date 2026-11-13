@@ -24,11 +24,12 @@ ROOM_X = {
 ENTITY = "climate.hall"
 
 
-async def _setup(hass, request, room, generation="LINE_X"):
+async def _setup(hass, request, room, generation="LINE_X", options=None):
     entry = MockConfigEntry(
         domain=DOMAIN,
         unique_id="1",
         data={"home_id": 1, "generation": generation, "refresh_token": "r"},
+        options=options or {},
     )
     entry.add_to_hass(hass)
     refresh = patch(
@@ -132,7 +133,7 @@ async def test_hvac_modes_and_boost(hass: HomeAssistant, request) -> None:
             {"entity_id": ENTITY, "preset_mode": "boost"},
             blocking=True,
         )
-        boost.assert_awaited_once_with(1, "LINE_X", 5)
+        boost.assert_awaited_once_with(1, "LINE_X", 5, 25.0, 1800)
 
 
 async def test_api_error_raises(hass: HomeAssistant, request) -> None:
