@@ -163,3 +163,15 @@ class TadoDeviceEntity(TadoEntity):
     @property
     def available(self) -> bool:
         return super().available and self._device is not None
+
+
+def room_temperature(room: dict[str, Any]) -> float | None:
+    """Measured room temperature (tado X ``value`` and classic ``celsius``)."""
+    inside = (room.get("sensorDataPoints") or {}).get("insideTemperature") or {}
+    return number(inside.get("value", inside.get("celsius")))
+
+
+def room_humidity(room: dict[str, Any]) -> float | None:
+    """Measured relative humidity percentage."""
+    humidity = (room.get("sensorDataPoints") or {}).get("humidity") or {}
+    return number(humidity.get("percentage"))

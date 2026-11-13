@@ -16,7 +16,14 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from . import TadoResumeConfigEntry
-from .capabilities import CAP_HEATING_POWER, CAP_HUMIDITY, CAP_OVERRIDE, CAP_SCHEDULE
+from .capabilities import (
+    CAP_HEATING_POWER,
+    CAP_HUMIDITY,
+    CAP_OVERRIDE,
+    CAP_SCHEDULE,
+    CAP_TEMPERATURE,
+)
+from .comfort import MOULD_RISK_LEVELS, dew_point, mould_risk
 from .entity import (
     TadoDeviceEntity,
     TadoEntity,
@@ -25,6 +32,8 @@ from .entity import (
     home_device_info,
     number,
     override_termination,
+    room_humidity,
+    room_temperature,
 )
 from .schedule import next_change
 
@@ -56,6 +65,9 @@ async def async_setup_entry(
             entities.append(TadoHeatingPower(entry, room["id"], room["name"]))
         if CAP_HUMIDITY in room_caps:
             entities.append(TadoHumidity(entry, room["id"], room["name"]))
+            if CAP_TEMPERATURE in room_caps:
+                entities.append(TadoDewPoint(entry, room["id"], room["name"]))
+                entities.append(TadoMouldRisk(entry, room["id"], room["name"]))
         if CAP_OVERRIDE in room_caps:
             entities.append(TadoOverrideEnds(entry, room["id"], room["name"]))
             entities.append(TadoOverrideRemaining(entry, room["id"], room["name"]))
@@ -130,6 +142,38 @@ class TadoHumidity(TadoRoomEntity, SensorEntity):
     def native_value(self) -> float | None:
         humidity = (self._room.get("sensorDataPoints") or {}).get("humidity") or {}
         return number(humidity.get("percentage"))
+
+
+class TadoDewPoint(TadoRoomEntity, SensorEntity):
+    """Dew point computed from room temperature and humidity."""
+
+    _attr_translation_key = "dew_point"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 1
+
+    def __init__(self, entry, room_id, room_name):
+        super().__init__(entry, room_id, room_name, "dew_point")
+
+    @property
+    def native_value(self) -> float | None:
+        return dew_point(room_temperature(self._room), room_humidity(self._room))
+
+
+class TadoMouldRisk(TadoRoomEntity, SensorEntity):
+    """Mould risk level computed from room temperature and humidity."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = MOULD_RISK_LEVELS
+    _attr_translation_key = "mould_risk"
+
+    def __init__(self, entry, room_id, room_name):
+        super().__init__(entry, room_id, room_name, "mould_risk")
+
+    @property
+    def native_value(self) -> str | None:
+        return mould_risk(room_temperature(self._room), room_humidity(self._room))
 
 
 class TadoOverrideEnds(TadoRoomEntity, SensorEntity):
