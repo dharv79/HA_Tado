@@ -1,0 +1,35 @@
+blueprint:
+  name: tado arrival, resume schedule
+  description: >
+    When someone arrives home, returns tado presence to automatic and resumes
+    every room's schedule.
+  domain: automation
+  source_url: https://github.com/dharv79/HA_Tado/blob/main/blueprints/automation/tado_resume/arrival_resume_schedule.yaml
+  input:
+    people:
+      name: People
+      selector:
+        entity:
+          domain: person
+          multiple: true
+    presence:
+      name: tado Presence select
+      selector:
+        entity:
+          integration: tado_resume
+          domain: select
+
+mode: single
+
+triggers:
+  - trigger: state
+    entity_id: !input people
+    to: home
+
+actions:
+  - action: select.select_option
+    target:
+      entity_id: !input presence
+    data:
+      option: auto
+  - action: tado_resume.resume_all_schedules

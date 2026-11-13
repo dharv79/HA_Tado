@@ -20,7 +20,7 @@ Goal: extend the integration beyond resume schedule to cover what tado thermosta
 | 13 | [phase-13-holiday-mode.md](phase-13-holiday-mode.md) | Holiday and away-until | 0.15.0 |
 | 14 | [phase-14-deferred-items.md](phase-14-deferred-items.md) | Early start and update-available | Blocked: no verified endpoint |
 | 15 | [phase-15-hot-water-ac.md](phase-15-hot-water-ac.md) | Hot water and air conditioning | 0.17.0 |
-| 16 | [phase-16-blueprints.md](phase-16-blueprints.md) | Automation blueprints | 0.18.0 |
+| 16 | [phase-16-blueprints.md](phase-16-blueprints.md) | Automation blueprints | 0.19.0 |
 | 17 | [phase-17-quality.md](phase-17-quality.md) | Quality tooling | 0.19.0 |
 
 Feature numbers (F1 to F20) refer to the agreed 20-feature list; each is assigned to exactly one phase.

@@ -1,0 +1,52 @@
+blueprint:
+  name: tado everyone away, away mode
+  description: >
+    Sets the tado home to away when every selected person has been away for a
+    set time.
+  domain: automation
+  source_url: https://github.com/dharv79/HA_Tado/blob/main/blueprints/automation/tado_resume/everyone_away.yaml
+  input:
+    people:
+      name: People
+      selector:
+        entity:
+          domain: person
+          multiple: true
+    presence:
+      name: tado Presence select
+      selector:
+        entity:
+          integration: tado_resume
+          domain: select
+    delay:
+      name: Away for at least
+      default: 600
+      selector:
+        number:
+          min: 0
+          max: 7200
+          unit_of_measurement: s
+
+mode: single
+
+variables:
+  people: !input people
+
+triggers:
+  - trigger: state
+    entity_id: !input people
+    to: not_home
+    for:
+      seconds: !input delay
+
+conditions:
+  - condition: template
+    value_template: >
+      {{ people | select('is_state', 'not_home') | list | length == people | length }}
+
+actions:
+  - action: select.select_option
+    target:
+      entity_id: !input presence
+    data:
+      option: away
