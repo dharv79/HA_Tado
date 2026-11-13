@@ -65,6 +65,37 @@ def heating_power(room: dict[str, Any]) -> float | None:
     return number((power or {}).get("percentage"))
 
 
+def override_termination(room: dict[str, Any]) -> dict[str, Any] | None:
+    """Normalised active override of a room, or None when following the schedule.
+
+    tado X: ``manualControlTermination``; classic: ``overlay.termination``.
+    Returns ``type`` (timer, next_schedule_block, manual), ``remaining`` seconds
+    and ``expiry`` (raw ISO string), each possibly None.
+    """
+    raw = room.get("manualControlTermination")
+    if not raw:
+        overlay = room.get("overlay")
+        raw = overlay.get("termination") if isinstance(overlay, dict) else None
+    if not isinstance(raw, dict) or not raw:
+        return None
+    kind = str(raw.get("type") or raw.get("typeSkillBasedApp") or "").upper()
+    remaining = raw.get("remainingTimeInSeconds")
+    expiry = raw.get("projectedExpiry") or raw.get("expiry")
+    return {
+        "type": _TERMINATION_TYPES.get(kind, kind.lower() or None),
+        "remaining": int(remaining) if isinstance(remaining, (int, float)) else None,
+        "expiry": expiry if isinstance(expiry, str) else None,
+    }
+
+
+_TERMINATION_TYPES = {
+    "TIMER": "timer",
+    "NEXT_TIME_BLOCK": "next_schedule_block",
+    "TADO_MODE": "next_schedule_block",
+    "MANUAL": "manual",
+}
+
+
 async def async_run(
     data: TadoResumeData, request: Awaitable[Any], what: str = "tado request"
 ) -> None:
