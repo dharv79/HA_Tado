@@ -1,6 +1,5 @@
-## 0.15.0
+## 0.16.0
 
-- New per-room sensors for classic (pre-tado X) systems: next schedule change (timestamp, with the new power state as an attribute) and next scheduled temperature.
-- The active timetable is read once an hour, so the extra requests are negligible.
-- tado X and schedule editing are not included: no schedule endpoint for tado X could be confirmed.
-- Endpoints and block fields follow tado's classic API and have not yet been confirmed against hardware.
+- New sensor **Heating run time today** for tado classic homes: seconds of heating so far today (shown in hours), with a per-zone breakdown in the `zones` attribute. Read every 15 minutes; created only when tado returns the data.
+- Not included: the boiler maximum flow temperature number and the energy-savings sensors. No public, verified endpoint exists for tado X, and the classic write is an installer-app endpoint, so no boiler writes are offered.
+- The run-time endpoint comes from a third-party client and is unverified against a live account.
