@@ -3,15 +3,25 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
+import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    HomeAssistantError,
+    ServiceValidationError,
+)
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.util import dt as dt_util
 
 from .api import TadoApi, TadoAuthError, TadoError
+from .away import AwayTimer
 from .const import (
     CONF_GENERATION,
     CONF_HOME_ID,
@@ -19,6 +29,7 @@ from .const import (
     DOMAIN,
     SERVICE_BOOST_ALL,
     SERVICE_RESUME_ALL,
+    SERVICE_SET_AWAY_UNTIL,
     SERVICE_TURN_OFF_ALL,
 )
 from .coordinator import TadoCoordinator
@@ -50,6 +61,7 @@ class TadoResumeData:
     generation: str
     rooms: list[dict]
     coordinator: TadoCoordinator
+    away: AwayTimer | None = None
 
     @property
     def room_ids(self) -> list[int]:
@@ -73,6 +85,31 @@ def _home_service(hass: HomeAssistant, method: str):
             await data.coordinator.async_request_refresh()
 
     return _handler
+
+
+def _away_until_service(hass: HomeAssistant):
+    """Build the set_away_until service handler."""
+
+    async def _handler(call: ServiceCall) -> None:
+        await _async_set_away_until(hass, call)
+
+    return _handler
+
+
+async def _async_set_away_until(hass: HomeAssistant, call: ServiceCall) -> None:
+    """Set every home away now and return it to automatic at the given time."""
+    until: datetime = dt_util.as_utc(call.data["until"])
+    if until <= dt_util.utcnow():
+        raise ServiceValidationError("The away end time must be in the future")
+    for loaded in hass.config_entries.async_loaded_entries(DOMAIN):
+        timer = loaded.runtime_data.away
+        if timer is None:
+            continue
+        try:
+            await timer.async_start(until)
+        except TadoError as err:
+            raise HomeAssistantError(f"Request failed: {err}") from err
+        await loaded.runtime_data.coordinator.async_request_refresh()
 
 
 def _remove_open_window_buttons(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -110,10 +147,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: TadoResumeConfigEntry) -
     await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = TadoResumeData(api, home_id, generation, rooms, coordinator)
+    entry.runtime_data.away = AwayTimer(hass, entry.entry_id, entry.runtime_data)
+    await entry.runtime_data.away.async_restore()
 
     if not hass.services.has_service(DOMAIN, SERVICE_RESUME_ALL):
         for service, method in HOME_SERVICES.items():
             hass.services.async_register(DOMAIN, service, _home_service(hass, method))
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_AWAY_UNTIL,
+            _away_until_service(hass),
+            schema=vol.Schema({vol.Required("until"): cv.datetime}),
+        )
 
     _remove_open_window_buttons(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
@@ -126,7 +171,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: TadoResumeConfigEntry) 
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         entry.runtime_data.coordinator.clear_issue()
+        if entry.runtime_data.away:
+            entry.runtime_data.away.async_shutdown()
     if unloaded and not hass.config_entries.async_loaded_entries(DOMAIN):
-        for service in HOME_SERVICES:
+        for service in (*HOME_SERVICES, SERVICE_SET_AWAY_UNTIL):
             hass.services.async_remove(DOMAIN, service)
     return unloaded

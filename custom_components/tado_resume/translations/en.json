@@ -141,6 +141,16 @@
     "turn_off_all_rooms": {
       "name": "Turn off all rooms",
       "description": "Switches heating off in every room until the next schedule block."
+    },
+    "set_away_until": {
+      "name": "Set away until",
+      "description": "Sets every home to away now and returns it to automatic (geofencing) at the chosen time. Choosing a presence manually cancels the timer.",
+      "fields": {
+        "until": {
+          "name": "Until",
+          "description": "When presence returns to automatic. Must be in the future."
+        }
+      }
     }
   },
   "selector": {
