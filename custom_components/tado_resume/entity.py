@@ -83,6 +83,7 @@ class TadoEntity(CoordinatorEntity[TadoCoordinator]):
 
     def __init__(self, entry: TadoResumeConfigEntry) -> None:
         self._data = entry.runtime_data
+        self._options = entry.options
         super().__init__(self._data.coordinator)
 
     @property

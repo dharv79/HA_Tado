@@ -114,12 +114,32 @@
         "duration": "For a duration",
         "indefinite": "Until changed"
       }
+    },
+    "default_termination": {
+      "options": {
+        "next_schedule_block": "At the next schedule block",
+        "indefinite": "Never (manual until resumed)"
+      }
     }
   },
   "issues": {
     "api_unreachable": {
       "title": "tado is not responding",
       "description": "Home Assistant has been unable to read from tado for over an hour. Check your internet connection and the tado status page; the integration retries automatically."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options",
+        "description": "Polling and override behaviour. The boost settings apply to the climate Boost preset; the whole-home boost uses tado's own settings.",
+        "data": {
+          "poll_interval": "Update interval (seconds)",
+          "boost_temperature": "Boost temperature",
+          "boost_minutes": "Boost duration (minutes)",
+          "default_termination": "Default override ends"
+        }
+      }
     }
   }
 }

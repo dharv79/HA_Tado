@@ -81,6 +81,11 @@ def _remove_open_window_buttons(hass: HomeAssistant, entry: ConfigEntry) -> None
             registry.async_remove(entity.entity_id)
 
 
+async def _async_options_updated(hass: HomeAssistant, entry: TadoResumeConfigEntry) -> None:
+    """Reload so changed options take effect without a restart."""
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: TadoResumeConfigEntry) -> bool:
     """Set up a tado home."""
 
@@ -109,6 +114,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: TadoResumeConfigEntry) -
             hass.services.async_register(DOMAIN, service, _home_service(hass, method))
 
     _remove_open_window_buttons(hass, entry)
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

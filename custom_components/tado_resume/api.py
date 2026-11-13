@@ -10,6 +10,8 @@ from typing import Any
 
 import aiohttp
 
+from .const import DEFAULT_BOOST_MINUTES, DEFAULT_BOOST_TEMPERATURE
+
 _LOGGER = logging.getLogger(__name__)
 
 CLIENT_ID = "1bb50063-6b0c-4d11-bd99-387f4a91cc46"
@@ -32,8 +34,6 @@ PRESENCE_AWAY = "away"
 PRESENCE_AUTO = "auto"
 PRESENCE_OPTIONS = (PRESENCE_HOME, PRESENCE_AWAY, PRESENCE_AUTO)
 
-BOOST_TEMPERATURE = 25.0
-BOOST_SECONDS = 1800
 
 _X_TERMINATION = {
     TERMINATION_NEXT_BLOCK: "NEXT_TIME_BLOCK",
@@ -350,14 +350,21 @@ class TadoApi:
             {"setting": setting, "termination": term},
         )
 
-    async def async_boost_room(self, home_id: int, generation: str, room_id: int) -> None:
-        """Boost a room for 30 minutes (tado X only)."""
+    async def async_boost_room(
+        self,
+        home_id: int,
+        generation: str,
+        room_id: int,
+        temperature: float = DEFAULT_BOOST_TEMPERATURE,
+        seconds: int = DEFAULT_BOOST_MINUTES * 60,
+    ) -> None:
+        """Boost a room (tado X only); 25 °C for 30 minutes unless told otherwise."""
         await self.async_set_manual(
             home_id,
             generation,
             room_id,
-            BOOST_TEMPERATURE,
+            temperature,
             TERMINATION_TIMER,
-            BOOST_SECONDS,
+            seconds,
             boost=True,
         )

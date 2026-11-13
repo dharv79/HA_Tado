@@ -1,7 +1,5 @@
-## 0.19.0
+## 0.11.0
 
-Quality tooling only; no behaviour changes.
-
-- Added ruff (lint and format) and mypy configuration.
-- CI now runs lint, type checks, tests with a coverage floor, hassfest and HACS validation.
-- Minor typing and style fixes across the code and tests.
+- New options (Configure on the integration): update interval, boost temperature, boost duration and how a manual override ends by default.
+- Changing options reloads the integration; no restart needed. Defaults match previous behaviour.
+- The whole-home "Boost all rooms" button keeps using tado's own boost settings.
