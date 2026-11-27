@@ -174,3 +174,63 @@ async def test_optional_endpoint_backs_off_and_serves_last_value() -> None:
     assert await api._optional("u") == {"v": 1}
     assert len(calls) == 3
     assert "u" not in api._optional_until
+
+
+async def test_ratelimit_header_tracks_quota_and_sets_wait(session):
+    api = TadoApi(session, "r")
+    api._access_token, api._expires_at = "a", 10**12
+    with aioresponses() as m:
+        m.get(f"{CLASSIC_API}/me", payload={"homes": []}, headers={"ratelimit": '"perday";r=42'})
+        m.get(
+            f"{CLASSIC_API}/me",
+            status=429,
+            headers={"ratelimit": '"perday";r=0;t=5400', "Retry-After": "60"},
+        )
+        await api.async_get_homes()
+        assert api.quota_remaining == 42
+        assert api.quota_refill_at is None
+        with pytest.raises(TadoRateLimitError) as err:
+            await api.async_get_homes()
+    assert err.value.retry_after == 5400  # tado's refill time wins over Retry-After
+    assert api.quota_remaining == 0
+    assert api.quota_refill_at is not None
+    assert api.request_count == 2
+
+
+def test_parse_ratelimit() -> None:
+    from custom_components.tado_resume.api import _parse_ratelimit
+
+    assert _parse_ratelimit('"perday";r=0;t=123') == (0, 123)
+    assert _parse_ratelimit('"perday";r=99') == (99, None)
+    assert _parse_ratelimit(None) == (None, None)
+
+
+async def test_slow_sections_are_reused_until_a_write() -> None:
+    api = TadoApi(None, "r")
+    calls: list[str] = []
+
+    async def fake(method, url, json=None):
+        calls.append(url)
+        if method != "GET":
+            api._fresh_until.clear()  # what _request does after a write
+        return [{"id": 5}] if url.endswith("/rooms") else {}
+
+    api._request = fake
+    await api.async_get_state(1, "LINE_X")
+    assert len(calls) == 5
+    await api.async_get_state(1, "LINE_X")
+    assert len(calls) == 7  # only rooms and presence read again
+    await api._request("POST", "write")
+    calls.clear()
+    await api.async_get_state(1, "LINE_X")
+    assert len(calls) == 5
+
+
+async def test_write_clears_cached_sections(session):
+    api = TadoApi(session, "r")
+    api._access_token, api._expires_at = "a", 10**12
+    api._fresh_until["x"] = 10**12
+    with aioresponses() as m:
+        m.post(f"{X_API}/homes/1/rooms/5/resumeSchedule", status=204)
+        await api.async_resume_room(1, GENERATION_X, 5)
+    assert api._fresh_until == {}

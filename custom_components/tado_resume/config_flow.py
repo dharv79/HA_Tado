@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
+from datetime import timedelta
 from typing import Any
 
 import voluptuous as vol
@@ -10,12 +12,14 @@ from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResu
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.util import dt as dt_util
 
 from .api import (
     TadoApi,
     TadoAuthError,
     TadoAuthPending,
     TadoError,
+    TadoRateLimitError,
     async_poll_device_flow,
     async_start_device_flow,
 )
@@ -33,6 +37,8 @@ from .const import (
     DEFAULT_TERMINATION,
     DOMAIN,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class TadoResumeConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -52,6 +58,18 @@ class TadoResumeConfigFlow(ConfigFlow, domain=DOMAIN):
         self._homes: list[dict[str, Any]] = []
         self._api: TadoApi | None = None
 
+    def _abort_for(self, err: TadoError) -> ConfigFlowResult:
+        """Abort with a message that says why tado could not be used."""
+        _LOGGER.warning("tado setup failed: %s", err)
+        if isinstance(err, TadoRateLimitError):
+            when = "tado's daily reset"
+            if err.retry_after:
+                when = dt_util.as_local(
+                    dt_util.utcnow() + timedelta(seconds=err.retry_after)
+                ).strftime("%H:%M")
+            return self.async_abort(reason="rate_limited", description_placeholders={"time": when})
+        return self.async_abort(reason="cannot_connect")
+
     async def _async_login(
         self, step_id: str, user_input: dict[str, Any] | None
     ) -> ConfigFlowResult | None:
@@ -61,8 +79,8 @@ class TadoResumeConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is None or not self._device:
             try:
                 self._device = await async_start_device_flow(session)
-            except TadoError:
-                return self.async_abort(reason="cannot_connect")
+            except TadoError as err:
+                return self._abort_for(err)
         else:
             try:
                 tokens = await async_poll_device_flow(session, self._device["device_code"])
@@ -71,8 +89,8 @@ class TadoResumeConfigFlow(ConfigFlow, domain=DOMAIN):
             except TadoAuthError:
                 self._device = {}
                 return self.async_abort(reason="auth_failed")
-            except TadoError:
-                return self.async_abort(reason="cannot_connect")
+            except TadoError as err:
+                return self._abort_for(err)
             else:
                 self._refresh_token = tokens["refresh_token"]
                 return None
@@ -114,8 +132,8 @@ class TadoResumeConfigFlow(ConfigFlow, domain=DOMAIN):
         except TadoAuthError:
             self._device = {}
             return self.async_abort(reason="auth_failed")
-        except TadoError:
-            return self.async_abort(reason="cannot_connect")
+        except TadoError as err:
+            return self._abort_for(err)
         if str(entry.data[CONF_HOME_ID]) not in {str(h["id"]) for h in homes}:
             return self.async_abort(reason="wrong_account")
         return self.async_update_reload_and_abort(
@@ -133,8 +151,8 @@ class TadoResumeConfigFlow(ConfigFlow, domain=DOMAIN):
         )
         try:
             self._homes = await api.async_get_homes()
-        except TadoError:
-            return self.async_abort(reason="cannot_connect")
+        except TadoError as err:
+            return self._abort_for(err)
         if not self._homes:
             return self.async_abort(reason="no_homes")
         if len(self._homes) == 1:
@@ -159,8 +177,8 @@ class TadoResumeConfigFlow(ConfigFlow, domain=DOMAIN):
         self._abort_if_unique_id_configured()
         try:
             generation = await api.async_get_generation(home["id"])
-        except TadoError:
-            return self.async_abort(reason="cannot_connect")
+        except TadoError as err:
+            return self._abort_for(err)
         return self.async_create_entry(
             title=home["name"],
             data={

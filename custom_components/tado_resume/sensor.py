@@ -83,6 +83,7 @@ async def async_setup_entry(
     if isinstance((coordinator.data or {}).get("run_time"), dict):
         entities.append(TadoRunTime(entry))
     entities.append(TadoLastUpdate(entry))
+    entities.append(TadoRequestsRemaining(entry))
     async_add_entities(entities)
 
 
@@ -327,3 +328,32 @@ class TadoLastUpdate(TadoEntity, SensorEntity):
     @property
     def native_value(self) -> datetime | None:
         return self.coordinator.last_success
+
+
+class TadoRequestsRemaining(TadoEntity, SensorEntity):
+    """Requests left in tado's daily quota, as reported by tado."""
+
+    _attr_translation_key = "requests_remaining"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, entry: TadoResumeConfigEntry) -> None:
+        super().__init__(entry)
+        self._attr_unique_id = f"{self._data.home_id}_requests_remaining"
+        self._attr_device_info = home_device_info(self._data.home_id)
+
+    @property
+    def available(self) -> bool:
+        # Most useful while tado is refusing requests.
+        return True
+
+    @property
+    def native_value(self) -> int | None:
+        return self._data.api.quota_remaining
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        refill = self._data.api.quota_refill_at
+        if refill is None:
+            return {}
+        return {"refills_at": dt_util.utc_from_timestamp(refill).isoformat()}

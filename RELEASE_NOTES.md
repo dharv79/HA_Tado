@@ -1,6 +1,9 @@
-## 0.20.0
+## 0.21.0
 
-Corrects the 0.19.0 release. Tag 0.19.0 points to an older commit (quality tooling only) that lacks everything from 0.11.0 to 0.18.0, so HACS users on 0.19.0 lost those features, including rate-limit handling. Update to 0.20.0.
+tado now limits API requests per account per day: 100 without a subscription, 20,000 with Auto-Assist or AI Assist. Running out stops all updates and blocks adding the integration until the quota refills.
 
-- Includes all changes from 0.11.0 to 0.18.0: options flow, adaptive polling and 429 back-off, device offset and child lock, override end time sensors, classic schedule and run-time sensors, dew point and mould risk, timed away.
-- Three automation blueprints: window open turns a room off and resumes it on close; everyone away sets away mode; arrival sets presence to automatic and resumes all schedules. Import buttons are in the README.
+- Polling is paced from tado's `ratelimit` header so the remaining requests last until the quota refills; 10 are kept back for your own actions.
+- New diagnostic sensor: tado requests remaining (with the refill time when tado gives it).
+- When the limit is reached, a repair says when the integration will try again, and setup or re-login says "daily request limit reached, try again after HH:MM" instead of "Unable to reach tado". Setup errors are now logged.
+- Fewer requests per poll: device, weather and mobile-device data is reused for 15 minutes (refreshed straight after any change you make).
+- The default polling interval is now 5 minutes (was 1 minute). A value you set in the options is kept.

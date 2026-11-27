@@ -30,18 +30,18 @@ async def test_options_flow_saves_values(hass: HomeAssistant, request) -> None:
     assert entry.options == new
 
 
-async def test_defaults_unchanged_without_options(hass: HomeAssistant, request) -> None:
+async def test_defaults_without_options(hass: HomeAssistant, request) -> None:
     await _setup(hass, request, ROOM_X)
     entry = hass.config_entries.async_entries(DOMAIN)[0]
     coordinator = entry.runtime_data.coordinator
-    assert coordinator.update_interval == timedelta(seconds=60)
+    assert coordinator.update_interval == timedelta(seconds=300)
     assert entry.options == {}
 
 
 async def test_poll_interval_option(hass: HomeAssistant, request) -> None:
-    await _setup(hass, request, ROOM_X, options={"poll_interval": 300})
+    await _setup(hass, request, ROOM_X, options={"poll_interval": 120})
     entry = hass.config_entries.async_entries(DOMAIN)[0]
-    assert entry.runtime_data.coordinator.update_interval == timedelta(seconds=300)
+    assert entry.runtime_data.coordinator.update_interval == timedelta(seconds=120)
 
 
 async def test_boost_and_termination_options(hass: HomeAssistant, request) -> None:
