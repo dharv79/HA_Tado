@@ -11,12 +11,13 @@ Version lives in `custom_components/tado_resume/manifest.json`. A release is cre
 - Release automatically once a piece of work is merged (standing user instruction). Automated notifications are not approval for anything else.
 
 ## Procedure
-1. **Bump PR:** on the dev branch set the new version in `manifest.json`. For hand-written notes also add `RELEASE_NOTES.md` (what is new, fixes, any user action required). Open a PR to `main`, wait for the Tests check to pass, squash-merge.
-2. **Trigger:**
+1. **Pick a free version:** `git fetch --tags origin && git tag -l` must not list it. A push to an existing version's trigger branch fails without changing the release.
+2. **Bump PR:** on the dev branch set the new version in `manifest.json`. For hand-written notes also add `RELEASE_NOTES.md` (what is new, fixes, any user action required). Open a PR to `main`, wait for the Tests check to pass, squash-merge.
+3. **Trigger:**
    `git fetch origin main && git push origin origin/main:refs/heads/release/<version>`
    Retry only on network errors, up to 4 times, backing off 2s, 4s, 8s, 16s.
-3. **Verify** (GitHub MCP `actions_list`, `get_release_by_tag`): the "Create Release" run succeeded; release `<version>` exists, targets the merge commit, has the correct prerelease flag and expected notes; `release/<version>` has been deleted.
-4. **Cleanup PR** (only if `RELEASE_NOTES.md` was added): remove it in a small follow-up PR so the next release does not reuse stale notes.
+4. **Verify** (GitHub MCP `actions_list`, `get_release_by_tag`): the "Create Release" run succeeded; release `<version>` exists, targets the merge commit (a tag merely existing is not proof), has the correct prerelease flag and expected notes; `release/<version>` has been deleted.
+5. **Cleanup PR** (only if `RELEASE_NOTES.md` was added): remove it in a small follow-up PR so the next release does not reuse stale notes.
 
 ## Maintenance
 Dependabot (`.github/dependabot.yml`) updates the pinned GitHub Actions monthly.
