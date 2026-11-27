@@ -24,6 +24,10 @@ A Home Assistant custom integration that resumes the tado° smart schedule, as t
 
 The integration keeps its own login, independent of the core tado integration.
 
+## tado request limit
+
+tado allows each account 100 API requests a day, or 20,000 with Auto-Assist or AI Assist; the tado app and other integrations share the allowance. The integration paces its polling to fit what is left (see the **tado requests remaining** sensor), so on a free account updates can be 20 to 40 minutes apart. If the limit is reached, a repair shows when it will try again; avoid reloading or re-adding the integration until then.
+
 ## Development
 
 ```

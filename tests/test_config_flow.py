@@ -106,3 +106,26 @@ async def test_reauth_wrong_account(hass: HomeAssistant) -> None:
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "wrong_account"
     assert entry.data["refresh_token"] == "dead"
+
+
+async def test_flow_reports_rate_limit(hass: HomeAssistant) -> None:
+    from custom_components.tado_resume.api import TadoError, TadoRateLimitError
+
+    for error, reason in (
+        (TadoRateLimitError("429", 3600), "rate_limited"),
+        (TadoRateLimitError("429"), "rate_limited"),
+        (TadoError("down"), "cannot_connect"),
+    ):
+        with (
+            patch(f"{P}.async_start_device_flow", AsyncMock(return_value=DEVICE)),
+            patch(f"{P}.async_poll_device_flow", AsyncMock(return_value={"refresh_token": "r"})),
+            patch(f"{P}.TadoApi.async_get_homes", AsyncMock(side_effect=error)),
+        ):
+            result = await hass.config_entries.flow.async_init(
+                DOMAIN, context={"source": config_entries.SOURCE_USER}
+            )
+            result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == reason
+        if reason == "rate_limited":
+            assert result["description_placeholders"]["time"]

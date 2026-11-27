@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from collections.abc import Awaitable, Callable
 from datetime import date
@@ -52,7 +53,10 @@ _TOKEN_MARGIN = 30
 SCHEDULE_TTL = 3600  # seconds a fetched timetable is reused
 RUN_TIME_TTL = 900  # seconds between heating run-time reads
 OPTIONAL_BACKOFF = 1800  # seconds to leave a failing optional endpoint alone
-MAX_RETRY_AFTER = 3600
+SLOW_TTL = 900  # seconds devices, weather and mobile devices are reused between reads
+MAX_RETRY_AFTER = 86400  # tado's quota is daily, so a wait can last most of a day
+
+_RATELIMIT_FIELD = re.compile(r"\b([rt])=(\d+)")
 
 
 class TadoError(Exception):
@@ -116,6 +120,14 @@ async def _token_request(session: aiohttp.ClientSession, data: dict[str, str]) -
         raise TadoError(f"Token request failed ({resp.status})")
 
 
+def _parse_ratelimit(value: str | None) -> tuple[int | None, int | None]:
+    """Parse tado's ``ratelimit`` header: ``"perday";r=<left>[;t=<seconds to refill>]``."""
+    fields = dict(_RATELIMIT_FIELD.findall(value or ""))
+    remaining = int(fields["r"]) if "r" in fields else None
+    refill = int(fields["t"]) if "t" in fields else None
+    return remaining, refill
+
+
 def _retry_after(value: str | None) -> float | None:
     """Parse a Retry-After header given in seconds."""
     try:
@@ -146,6 +158,11 @@ class TadoApi:
         self._optional_last: dict[str, Any] = {}
         self._run_times: dict[int, tuple[float, dict[str, Any] | None]] = {}
         self._schedules: dict[int, tuple[float, dict[str, Any] | None]] = {}
+        self._fresh_until: dict[str, float] = {}
+        # Daily request quota as last reported by tado (None until seen).
+        self.quota_remaining: int | None = None
+        self.quota_refill_at: float | None = None  # epoch seconds, when tado said
+        self.request_count = 0
 
     async def _async_ensure_token(self, stale: str | None = None) -> str:
         """Return a valid access token, refreshing at most once concurrently.
@@ -188,7 +205,12 @@ class TadoApi:
             if method in ("POST", "PUT", "PATCH"):
                 # tado X rejects body-less writes without a JSON content type.
                 headers["Content-Type"] = "application/json"
+            self.request_count += 1
             async with self._session.request(method, url, headers=headers, json=json) as resp:
+                remaining, refill = _parse_ratelimit(resp.headers.get("ratelimit"))
+                if remaining is not None:
+                    self.quota_remaining = remaining
+                    self.quota_refill_at = time.time() + refill if refill is not None else None
                 if resp.status == 401 and attempt == 0:
                     continue
                 if resp.status == 401:
@@ -202,10 +224,15 @@ class TadoApi:
                         (await resp.text())[:200],
                     )
                 if resp.status == 429:
-                    raise TadoRateLimitError(
-                        f"{method} {url} rate limited (429)",
-                        _retry_after(resp.headers.get("Retry-After")),
+                    wait = (
+                        float(min(refill, MAX_RETRY_AFTER))
+                        if refill is not None
+                        else _retry_after(resp.headers.get("Retry-After"))
                     )
+                    raise TadoRateLimitError(f"{method} {url} rate limited (429)", wait)
+                if method != "GET":
+                    # A write may change anything cached; read it all again next poll.
+                    self._fresh_until.clear()
                 if resp.status >= 400:
                     detail = (await resp.text())[:300]
                     raise TadoError(f"{method} {url} failed ({resp.status}): {detail}")
@@ -306,13 +333,16 @@ class TadoApi:
         else:
             await self._request("PUT", f"{CLASSIC_API}/devices/{serial}/childLock", body)
 
-    async def _optional(self, url: str) -> Any:
+    async def _optional(self, url: str, ttl: float = 0) -> Any:
         """GET an endpoint that may be unavailable for some homes.
 
         After a failure the endpoint is skipped for OPTIONAL_BACKOFF seconds and
-        the last good payload (if any) is returned instead.
+        the last good payload (if any) is returned instead. With ``ttl`` a good
+        payload is reused for that many seconds, to save requests; any write
+        clears this.
         """
-        if time.monotonic() < self._optional_until.get(url, 0.0):
+        now = time.monotonic()
+        if now < self._optional_until.get(url, 0.0) or now < self._fresh_until.get(url, 0.0):
             return self._optional_last.get(url)
         try:
             data = await self._request("GET", url)
@@ -323,6 +353,8 @@ class TadoApi:
             return self._optional_last.get(url)
         self._optional_until.pop(url, None)
         self._optional_last[url] = data
+        if ttl:
+            self._fresh_until[url] = time.monotonic() + ttl
         return data
 
     async def _run_time(self, home_id: int) -> dict[str, Any] | None:
@@ -385,18 +417,18 @@ class TadoApi:
         if generation == GENERATION_X:
             rooms, devices, presence, weather, mobiles = await asyncio.gather(
                 self._request("GET", f"{x_home}/rooms"),
-                self._optional(f"{x_home}/roomsAndDevices"),
+                self._optional(f"{x_home}/roomsAndDevices", SLOW_TTL),
                 self._optional(f"{x_home}/state"),
-                self._optional(f"{classic}/weather"),
-                self._optional(f"{classic}/mobileDevices"),
+                self._optional(f"{classic}/weather", SLOW_TTL),
+                self._optional(f"{classic}/mobileDevices", SLOW_TTL),
             )
         else:
             zones, devices, presence, weather, mobiles = await asyncio.gather(
                 self._request("GET", f"{classic}/zones"),
-                self._optional(f"{classic}/devices"),
+                self._optional(f"{classic}/devices", SLOW_TTL),
                 self._optional(f"{classic}/state"),
-                self._optional(f"{classic}/weather"),
-                self._optional(f"{classic}/mobileDevices"),
+                self._optional(f"{classic}/weather", SLOW_TTL),
+                self._optional(f"{classic}/mobileDevices", SLOW_TTL),
             )
             states = await asyncio.gather(
                 *(self._optional(f"{classic}/zones/{zone['id']}/state") for zone in zones or [])

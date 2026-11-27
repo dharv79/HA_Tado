@@ -20,7 +20,8 @@
       "not_authorised": "Login has not been approved yet. Approve it in the browser, then submit again."
     },
     "abort": {
-      "cannot_connect": "Unable to reach tado.",
+      "cannot_connect": "Unable to reach tado. The Home Assistant log has the details.",
+      "rate_limited": "tado's daily request limit for this account has been reached. Try again after {time}.",
       "auth_failed": "Authentication failed or expired. Start again.",
       "no_homes": "No homes found on this account.",
       "already_configured": "This home is already configured.",
@@ -68,6 +69,9 @@
       },
       "last_update": {
         "name": "Last successful update"
+      },
+      "requests_remaining": {
+        "name": "tado requests remaining"
       },
       "override_ends": {
         "name": "Override ends"
@@ -169,6 +173,10 @@
     }
   },
   "issues": {
+    "rate_limited": {
+      "title": "tado daily request limit reached",
+      "description": "tado is refusing requests because this account has used its daily allowance (100 a day without Auto-Assist). The integration waits and tries again at {time}; avoid reloading it until then. Polling is slowed automatically to stay within the allowance."
+    },
     "api_unreachable": {
       "title": "tado is not responding",
       "description": "Home Assistant has been unable to read from tado for over an hour. Check your internet connection and the tado status page; the integration retries automatically."

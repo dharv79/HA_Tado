@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -23,6 +24,11 @@ MAX_INTERVAL = timedelta(minutes=15)
 AWAY_FACTOR = 3  # poll this many times slower while the home is away
 FAILURE_REPAIR_AFTER = timedelta(hours=1)
 ISSUE_API_UNREACHABLE = "api_unreachable"
+ISSUE_RATE_LIMITED = "rate_limited"
+RATE_LIMIT_WAIT = timedelta(hours=1)  # wait after a 429 that names no time
+QUOTA_RESERVE = 10  # requests kept back for user actions such as resuming a room
+QUOTA_DAY = timedelta(hours=24)  # assumed time to refill when tado does not say
+MAX_PACED_INTERVAL = timedelta(hours=3)  # longest wait when tado does not say
 
 
 class TadoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -48,23 +54,37 @@ class TadoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.mobiles: dict[Any, dict[str, Any]] = {}
         self.last_success: datetime | None = None
         self._failing_since: datetime | None = None
+        self._last_count = api.request_count
+        self._per_poll: float | None = None  # average requests used per poll
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
             state = await self.api.async_get_state(self.home_id, self.generation)
         except TadoAuthError as err:
             raise ConfigEntryAuthFailed from err
+        except TadoRateLimitError as err:
+            wait = timedelta(seconds=err.retry_after) if err.retry_after else RATE_LIMIT_WAIT
+            self.update_interval = max(wait, self.base_interval)
+            resume = dt_util.as_local(dt_util.utcnow() + wait).strftime("%H:%M")
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                f"{ISSUE_RATE_LIMITED}_{self.home_id}",
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key=ISSUE_RATE_LIMITED,
+                translation_placeholders={"time": resume},
+            )
+            raise UpdateFailed(f"tado daily request limit reached; next try at {resume}") from err
         except TadoError as err:
-            backoff = min(
+            self.update_interval = min(
                 (self.update_interval or self.base_interval) * 2,
                 max(MAX_INTERVAL, self.base_interval),
             )
-            if isinstance(err, TadoRateLimitError) and err.retry_after:
-                backoff = max(backoff, timedelta(seconds=err.retry_after))
-            self.update_interval = backoff
             self._note_failure()
             raise UpdateFailed(str(err)) from err
-        self.update_interval = self._steady_interval(state)
+        self._note_usage()
+        self.update_interval = self._paced(self._steady_interval(state))
         self.last_success = dt_util.utcnow()
         self._failing_since = None
         self.clear_issue()
@@ -79,6 +99,29 @@ class TadoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if isinstance(presence, dict) and str(presence.get("presence", "")).upper() == "AWAY":
             return self.base_interval * AWAY_FACTOR
         return self.base_interval
+
+    def _note_usage(self) -> None:
+        """Track the average number of requests used per poll, writes included."""
+        used = self.api.request_count - self._last_count
+        self._last_count = self.api.request_count
+        if used > 0:
+            self._per_poll = used if self._per_poll is None else 0.7 * self._per_poll + 0.3 * used
+
+    def _paced(self, steady: timedelta) -> timedelta:
+        """Stretch the interval so the polls left fit tado's daily request quota."""
+        remaining = self.api.quota_remaining
+        if remaining is None or not self._per_poll:
+            return steady
+        refill_at = self.api.quota_refill_at
+        if refill_at is not None:
+            horizon = max(refill_at - time.time(), 0.0)
+            cap = horizon
+        else:
+            horizon = QUOTA_DAY.total_seconds()
+            cap = MAX_PACED_INTERVAL.total_seconds()
+        spare = remaining - QUOTA_RESERVE
+        paced = cap if spare <= 0 else min(horizon * self._per_poll / spare, cap)
+        return max(steady, timedelta(seconds=paced))
 
     def _note_failure(self) -> None:
         """Raise a repair issue once the API has failed for a sustained period."""
@@ -96,5 +139,6 @@ class TadoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
 
     def clear_issue(self) -> None:
-        """Remove the repair issue, if present."""
+        """Remove the repair issues, if present."""
         ir.async_delete_issue(self.hass, DOMAIN, f"{ISSUE_API_UNREACHABLE}_{self.home_id}")
+        ir.async_delete_issue(self.hass, DOMAIN, f"{ISSUE_RATE_LIMITED}_{self.home_id}")
